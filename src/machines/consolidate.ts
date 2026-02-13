@@ -8,7 +8,7 @@
  */
 
 import { setup, assign, fromPromise } from "xstate";
-import { parseConsolidationOutput, resolveIntraBatchLinks } from "../prompts/consolidate.js";
+import { parseConsolidationOutput } from "../prompts/consolidate.js";
 import type { JournalForPrompt, ExistingEntryRef, ParsedKbEntry } from "../prompts/consolidate.js";
 
 export interface ConsolidateError {
@@ -49,6 +49,10 @@ const fetchHistoryActor = fromPromise<
   throw new Error("fetchHistory: not provided via machine.provide()");
 });
 
+const listExistingActor = fromPromise<ExistingEntryRef[], void>(async () => {
+  throw new Error("listExisting: not provided via machine.provide()");
+});
+
 const runAgentActor = fromPromise<
   string,
   { journals: JournalForPrompt[]; existingEntries: ExistingEntryRef[] }
@@ -84,6 +88,7 @@ export const consolidateMachine = setup({
   actors: {
     loadQueue: loadQueueActor,
     fetchHistory: fetchHistoryActor,
+    listExisting: listExistingActor,
     runAgent: runAgentActor,
     writeEntries: writeEntriesActor,
     markProcessed: markProcessedActor,
@@ -93,6 +98,8 @@ export const consolidateMachine = setup({
     assignQueueEntries: assign({
       queueEntries: (_, params: { entries: Array<{ id: string; entry: unknown }> }) =>
         params.entries,
+    }),
+    assignJournals: assign({
       journals: (_, params: { journals: JournalForPrompt[] }) => params.journals,
     }),
     assignHistoryContent: assign({
@@ -114,6 +121,9 @@ export const consolidateMachine = setup({
     assignProcessedCount: assign({
       processedCount: (_, params: { count: number; failedIds: string[] }) => params.count,
       failedQueueIds: (_, params: { count: number; failedIds: string[] }) => params.failedIds,
+    }),
+    assignExistingEntries: assign({
+      existingEntries: (_, params: { entries: ExistingEntryRef[] }) => params.entries,
     }),
     assignError: assign({
       error: (_, params: { _tag: string; message: string }) => ({
@@ -157,23 +167,29 @@ export const consolidateMachine = setup({
               params: ({ event }) => ({ entries: event.output.entries }),
             },
             target: "fetchHistory",
-            actions: {
-              type: "assignQueueEntries",
-              params: ({ event }) => ({
-                entries: event.output.entries,
-                journals: event.output.journals,
-              }),
-            },
+            actions: [
+              {
+                type: "assignQueueEntries",
+                params: ({ event }) => ({ entries: event.output.entries }),
+              },
+              {
+                type: "assignJournals",
+                params: ({ event }) => ({ journals: event.output.journals }),
+              },
+            ],
           },
           {
             target: "completed",
-            actions: {
-              type: "assignQueueEntries",
-              params: ({ event }) => ({
-                entries: event.output.entries,
-                journals: event.output.journals,
-              }),
-            },
+            actions: [
+              {
+                type: "assignQueueEntries",
+                params: ({ event }) => ({ entries: event.output.entries }),
+              },
+              {
+                type: "assignJournals",
+                params: ({ event }) => ({ journals: event.output.journals }),
+              },
+            ],
           },
         ],
         onError: {
@@ -217,14 +233,13 @@ export const consolidateMachine = setup({
     listExisting: {
       invoke: {
         id: "listExisting",
-        src: fromPromise(async () => {
-          throw new Error("listExisting: not provided via machine.provide()");
-        }),
+        src: "listExisting",
         onDone: {
           target: "runAgent",
-          actions: assign({
-            existingEntries: (_, params: { entries: ExistingEntryRef[] }) => params.entries,
-          }),
+          actions: {
+            type: "assignExistingEntries",
+            params: ({ event }) => ({ entries: event.output }),
+          },
         },
         onError: {
           target: "failed",

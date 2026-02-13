@@ -37,9 +37,36 @@ const ConfigSchema = type({
 
 export type Config = typeof ConfigSchema.infer;
 
+export interface ResolvedStorage {
+  root: string;
+  autoCommit: boolean;
+  commitHook: string;
+}
+
+export interface ResolvedLlm {
+  command: string;
+  presets: Record<string, string>;
+}
+
+export interface ResolvedSchedule {
+  consolidateIntervalHours: number;
+  defragIntervalHours: number;
+}
+
+export interface ResolvedAgentsMd {
+  targets: string[];
+}
+
+export interface ResolvedConfig {
+  storage: ResolvedStorage;
+  llm: ResolvedLlm;
+  schedule: ResolvedSchedule;
+  agentsMd: ResolvedAgentsMd;
+}
+
 const DEFAULT_MEMORY_ROOT = join(homedir(), "commonplace", "01_files", "_utilities", "agent-memories");
 
-export const DEFAULT_CONFIG: Required<Config> = {
+export const DEFAULT_CONFIG: ResolvedConfig = {
   storage: {
     root: DEFAULT_MEMORY_ROOT,
     autoCommit: true,
@@ -71,7 +98,7 @@ function findConfigFile(): string | null {
   return null;
 }
 
-export function loadConfig(): Required<Config> {
+export function loadConfig(): ResolvedConfig {
   const configPath = findConfigFile();
   if (!configPath) {
     return DEFAULT_CONFIG;
@@ -88,10 +115,22 @@ export function loadConfig(): Required<Config> {
     }
 
     return {
-      storage: { ...DEFAULT_CONFIG.storage, ...validated.storage },
-      llm: { ...DEFAULT_CONFIG.llm, ...validated.llm },
-      schedule: { ...DEFAULT_CONFIG.schedule, ...validated.schedule },
-      agentsMd: { ...DEFAULT_CONFIG.agentsMd, ...validated.agentsMd },
+      storage: {
+        root: validated.storage?.root ?? DEFAULT_CONFIG.storage.root,
+        autoCommit: validated.storage?.autoCommit ?? DEFAULT_CONFIG.storage.autoCommit,
+        commitHook: validated.storage?.commitHook ?? DEFAULT_CONFIG.storage.commitHook,
+      },
+      llm: {
+        command: validated.llm?.command ?? DEFAULT_CONFIG.llm.command,
+        presets: validated.llm?.presets ?? DEFAULT_CONFIG.llm.presets,
+      },
+      schedule: {
+        consolidateIntervalHours: validated.schedule?.consolidateIntervalHours ?? DEFAULT_CONFIG.schedule.consolidateIntervalHours,
+        defragIntervalHours: validated.schedule?.defragIntervalHours ?? DEFAULT_CONFIG.schedule.defragIntervalHours,
+      },
+      agentsMd: {
+        targets: validated.agentsMd?.targets ?? DEFAULT_CONFIG.agentsMd.targets,
+      },
     };
   } catch (e) {
     console.warn(`failed to load config: ${e instanceof Error ? e.message : String(e)}, using defaults`);

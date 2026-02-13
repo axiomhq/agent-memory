@@ -8,7 +8,7 @@ import { type } from "arktype";
 import { ID_PATTERN } from "./id.js";
 
 export const JournalQueueEntrySchema = type({
-  version: "1",
+  version: '"1"',
   timestamp: "string",
   harness: "'amp' | 'cursor' | 'codex' | 'manual'",
   retrieval: {

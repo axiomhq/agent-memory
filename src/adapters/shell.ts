@@ -21,9 +21,8 @@ export async function executeShellLLM(
     stderr: "pipe",
   });
 
-  const writer = proc.stdin.getWriter();
-  writer.write(new TextEncoder().encode(prompt));
-  writer.close();
+  proc.stdin.write(prompt);
+  proc.stdin.end();
 
   const timeoutId = setTimeout(() => {
     proc.kill();

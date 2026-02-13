@@ -84,7 +84,7 @@ export const defragMachine = setup({
     }),
   },
   guards: {
-    hasEntries: ({ context }) => context.entries.length > 0,
+    hasEntries: (_, params: { entries: EntryForDefrag[] }) => params.entries.length > 0,
     hasDecision: ({ context }) => context.decision !== null,
     hasActions: ({ context }) => (context.decision?.actions.length ?? 0) > 0,
     hasParseError: ({ context }) => context.parseError !== undefined,
