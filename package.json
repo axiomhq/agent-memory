@@ -1,0 +1,24 @@
+{
+  "name": "agent-memory",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "memory": "./src/cli/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "oxlint",
+    "format": "oxfmt --write"
+  },
+  "dependencies": {
+    "arktype": "^2.1.0",
+    "neverthrow": "^8.0.0",
+    "xstate": "^5.19.0",
+    "nanoid": "^5.0.9"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.7.0"
+  }
+}
