@@ -54,12 +54,12 @@ consumed as a **git submodule** by axi-agent and as a **nix flake** by personal 
 **Description:** As a memory system consumer, I want memory entries to have stable identifiers that survive renames and reorganization so that cross-links don't break.
 
 **Acceptance Criteria:**
-- [ ] Memory filename convention: `descriptive-title -- topic__x topic__y id__XXXX.md`
-- [ ] `id__XXXX` is a 4-character stable hash derived from content + creation timestamp (base58, collision-resistant for expected corpus size)
+- [ ] Memory filename convention: `descriptive-title -- topic__x topic__y id__XXXXXX.md`
+- [ ] `id__XXXXXX` is a 6-character stable hash derived from content + creation timestamp (base58, per [unkey's UUID UX principles](https://www.unkey.com/blog/uuid-ux))
 - [ ] NO date prefix in filenames (not useful for retrieval — decided in design conversation)
-- [ ] Cross-links use `[[id__XXXX]]` syntax, resolvable via grep
+- [ ] Cross-links use `[[id__XXXXXX]]` syntax, resolvable via grep
 - [ ] `MemoryEntryMeta` arktype schema includes fields from axi-agent PLUS gilfoyle additions:
-  - `id` (id__XXXX format)
+  - `id` (id__XXXXXX format)
   - `title`, `tags` (topic__*, area__*)
   - `status`: `captured → consolidated → promoted`
   - `used: number` — read counter (gilfoyle pattern)
@@ -109,10 +109,9 @@ consumed as a **git submodule** by axi-agent and as a **nix flake** by personal 
 - [ ] adapters interface (`ConsolidateAdapters`) includes:
   - `loadQueue(limit)` — reads pending journal queue entries
   - `fetchHistory(retrieval)` — per-harness: calls amp read_thread, reads cursor session file, reads inline file content
-  - `executeAgent(prompt)` — LLM invocation (dependency-injectable, not hardcoded to amp-sdk)
+  - `executeAgent(prompt)` — pipes prompt to configured shell command, returns response
   - `writeKbEntry(input)` — writes to topics/ via persistence adapter
   - `markProcessed(entryId)` — moves queue entry to processed
-  - `commitChanges(message)` — optional git commit
 - [ ] consolidation prompt preserved from axi-agent (zettelkasten decomposition, cross-referencing, tags)
 - [ ] `parseConsolidationOutput` and `resolveIntraBatchLinks` extracted from axi-agent
 - [ ] typecheck passes
@@ -122,14 +121,13 @@ consumed as a **git submodule** by axi-agent and as a **nix flake** by personal 
 
 **Acceptance Criteria:**
 - [ ] xstate machine with states: `scanEntries → analyzeStructure → runAgent → applyChanges → generateAgentsMd → commitChanges → completed | failed`
-- [ ] analysis considers:
-  - `used`/`last_used` counters for hot/warm/cold tiering
-  - `pinned` flag overrides usage-based tiering
+- [ ] the defrag agent receives the full corpus + usage metadata (`used`, `last_used`, `pinned`) and qualitatively decides:
+  - what earns hot-tier (inlined in AGENTS.md) — agent judgment, not thresholds
+  - what to merge, split, rename, or archive
   - file count targets: 15-25 focused files (letta pattern)
   - max ~40 lines per file (split if larger)
   - duplicate/overlapping content detection
-- [ ] agent-driven: the defrag LLM decides what to merge, split, rename, and re-tier
-- [ ] adapter-injected LLM invocation (same pattern as consolidation)
+- [ ] adapter-injected LLM invocation (pipes prompt to configured shell command)
 - [ ] typecheck passes
 
 ### US-007: AGENTS.md Generator
@@ -137,10 +135,10 @@ consumed as a **git submodule** by axi-agent and as a **nix flake** by personal 
 
 **Acceptance Criteria:**
 - [ ] generates an AGENTS.md section with three tiers:
-  - **hot** (pinned=true OR used ≥ N in last M days): full content inlined in AGENTS.md
-  - **warm** (used recently but not hot): file paths listed with one-line descriptions
+  - **hot** (agent qualitatively decides what earns its place, informed by pinned flag + usage data): full content inlined in AGENTS.md
+  - **warm** (relevant but not top-tier): file paths listed with one-line descriptions
   - **cold** (everything else): omitted, discoverable via `memory list` or grep
-- [ ] hot/warm thresholds configurable via a `memory.config.json` or similar
+- [ ] tiering decisions are made by the defrag agent (LLM-driven, letta-style), not by hard thresholds. `used`/`last_used` are inputs to the agent, not programmatic cutoffs
 - [ ] output is a markdown string that can be written to any AGENTS.md location
 - [ ] supports writing to multiple AGENTS.md targets:
   - `~/.config/amp/AGENTS.md` (global amp context)
@@ -155,7 +153,7 @@ consumed as a **git submodule** by axi-agent and as a **nix flake** by personal 
 - [ ] **write adapter**: after-session hook that creates a journal queue entry with `harness: "amp"`, `retrieval.method: "amp-thread"`, `retrieval.threadId: "T-xxx"`
   - implementable as an amp skill that calls the CLI
   - does NOT depend on `@sourcegraph/amp-sdk` — uses CLI or direct file write
-- [ ] **read adapter**: `fetchHistory("amp-thread", threadId)` invokes `amp thread read T-xxx` (or equivalent CLI) to retrieve session content for consolidation
+- [ ] **read adapter**: `fetchHistory("amp-thread", threadId)` invokes `amp thread read T-xxx` CLI command to retrieve session content for consolidation
 - [ ] adapter is a separate module that can be omitted when amp isn't available
 - [ ] typecheck passes
 
@@ -217,15 +215,16 @@ consumed as a **git submodule** by axi-agent and as a **nix flake** by personal 
   ```jsonc
   {
     "storage": {
-      "root": "~/commonplace/01_files/_utilities/agent-memories/"
+      "root": "~/commonplace/01_files/_utilities/agent-memories/",
+      "autoCommit": true,  // git auto-commit on write
+      "commitHook": "git commit --trailer 'Thread-Id: {threadId}'"  // template
     },
     "llm": {
-      "provider": "amp-cli | shell-command",
-      "command": "amp agent run"  // when provider is shell-command
-    },
-    "tiering": {
-      "hotThreshold": { "minUsed": 5, "withinDays": 30 },
-      "warmThreshold": { "minUsed": 1, "withinDays": 90 }
+      "command": "amp agent run",  // shell command that accepts prompt on stdin
+      "presets": {  // built-in presets users can reference by name
+        "amp": "amp agent run",
+        "ollama": "ollama run llama3"
+      }
     },
     "schedule": {
       "consolidateIntervalHours": 2,
@@ -243,15 +242,15 @@ consumed as a **git submodule** by axi-agent and as a **nix flake** by personal 
 ## Functional Requirements
 
 - FR-1: journal queue entries are validated against arktype schema at write time; malformed entries are rejected with structured errors
-- FR-2: memory entry IDs use `id__XXXX` format (4-char base58 hash); generated deterministically from title + createdAt timestamp
-- FR-3: cross-links use `[[id__XXXX]]` syntax; the persistence adapter resolves these to file paths via grep
+- FR-2: memory entry IDs use `id__XXXXXX` format (6-char base58 hash); generated deterministically from title + createdAt timestamp
+- FR-3: cross-links use `[[id__XXXXXX]]` syntax; the persistence adapter resolves these to file paths via grep
 - FR-4: the consolidation machine is pure xstate — all I/O injected via `machine.provide()`. no direct imports of amp-sdk, fs, or shell
 - FR-5: the defrag machine is pure xstate — same injection pattern as consolidation
-- FR-6: LLM invocation is dependency-injectable via config. when `provider: "amp-cli"`, shells out to amp. when `provider: "shell-command"`, runs the configured command. no compiled-in LLM dependency
+- FR-6: LLM invocation is shell-command-based: agent-memory produces a prompt, the user's configured command pipes it to their LLM. presets provided for common setups (amp, etc.) but no compiled-in LLM dependency
 - FR-7: AGENTS.md generation uses sentinel comments (`<!-- agent-memory:start -->` / `<!-- agent-memory:end -->`) to replace only its managed section
 - FR-8: the `used` counter and `last_used` timestamp update atomically on every `read()` call
 - FR-9: file writes use atomic write-rename (write to `.tmp`, rename into place) — preserving axi-agent's crash-safety pattern
-- FR-10: git commits are optional — the consolidation and defrag machines work with or without git
+- FR-10: git auto-commit is a configurable adapter hook (e.g., attribute threadId to commit message). the machines themselves don't know about git — the persistence adapter's post-write hook handles it
 - FR-11: the repo is consumable both as a git submodule (for axi-agent) and as a standalone nix flake (for dotfiles)
 - FR-12: all error types are tagged unions using neverthrow's `ResultAsync` — no thrown exceptions at public API boundaries
 - FR-13: the filesystem adapter reads memory entries from markdown files with YAML frontmatter (preserving the `serializeMemoryMarkdown`/`parseMemoryMarkdown` pattern from axi-agent)
@@ -260,7 +259,7 @@ consumed as a **git submodule** by axi-agent and as a **nix flake** by personal 
 
 - **org-tier / team memory**: personal-only for v1. org support can layer on later using the same adapter interface
 - **vector/embedding-based retrieval**: the system uses keyword/tag retrieval + AGENTS.md hot injection. semantic search is a future concern
-- **real-time sync**: memory lives in syncthing-ed commonplace; no custom sync protocol
+- **real-time sync**: memory folder is excluded from syncthing; git is the sync mechanism
 - **GUI**: CLI-only interface
 - **multi-user concurrency**: single-caller CLI scripts. no locking, no conflict resolution beyond atomic writes
 - **windows support**: macOS (launchd) and linux (systemd) only. nix handles both
@@ -281,7 +280,7 @@ consumed as a **git submodule** by axi-agent and as a **nix flake** by personal 
 these files are extracted and adapted (not copied verbatim):
 | axi-agent file | agent-memory equivalent | changes |
 |---|---|---|
-| `schema.ts` | `src/schema.ts` | new ID format (id__XXXX), add used/last_used/pinned, drop org tier |
+| `schema.ts` | `src/schema.ts` | new ID format (id__XXXXXX), add used/last_used/pinned, drop org tier |
 | `persist/index.ts` | `src/persist/index.ts` | simplified MemoryScope (no org), same interface shape |
 | `persist/filesystem.ts` | `src/persist/filesystem.ts` | new filename convention, new directory layout, configurable root |
 | `service.ts` | `src/service.ts` | add used/last_used auto-increment on read |
@@ -349,9 +348,9 @@ agent-memory/
 │   ├── 2026-02-13T14-30_amp_abc123.json
 │   └── .processed/            # consumed entries
 ├── topics/                    # organized knowledge base (markdown)
-│   ├── xstate-guard-patterns -- topic__xstate topic__patterns id__a1b2.md
-│   ├── neverthrow-error-tags -- topic__neverthrow topic__errors id__c3d4.md
-│   └── bun-test-mocking -- topic__bun topic__testing id__e5f6.md
+│   ├── xstate-guard-patterns -- topic__xstate topic__patterns id__a1b2c3.md
+│   ├── neverthrow-error-tags -- topic__neverthrow topic__errors id__c3d4e5.md
+│   └── bun-test-mocking -- topic__bun topic__testing id__e5f6g7.md
 └── archive/                   # demoted/superseded entries
 ```
 
@@ -364,11 +363,15 @@ agent-memory/
 - `memory doctor` reports zero orphaned links and zero schema violations on a healthy corpus
 - the CLI works standalone without any agent harness installed
 
+## Resolved Questions
+
+1. **hash length**: 6-char base58 (`id__XXXXXX`, ~38B combinations). per [unkey's UUID UX](https://www.unkey.com/blog/uuid-ux), short + org-scoped is fine. org prefix handles any theoretical collisions
+2. **LLM provider**: shell-command. agent-memory produces a prompt, user's configured command consumes it via stdin. presets for common setups (amp, ollama, etc.)
+3. **AGENTS.md tiering**: no hard thresholds. the defrag agent qualitatively decides what earns hot-tier, informed by `used`/`last_used`/`pinned`. letta-style agent judgment
+4. **git commits**: configurable adapter hook in `memory.config.json`. `autoCommit: true` + `commitHook` template. commonplace is NOT a git repo; memory folder is its own repo, excluded from syncthing
+5. **defrag frequency**: daily. corpus is small (just text), will increase frequency during testing
+6. **axi-agent migration**: deferred. one-time migration script when needed — it's just a script
+
 ## Open Questions
 
-1. **4-char hash collision risk**: at what corpus size does `id__XXXX` (base58^4 ≈ 11.3M) become a concern? should we use 5 or 6 chars? the design conversation chose 4 — worth validating against expected growth
-2. **LLM provider for consolidation**: should the default be `amp agent run` (requires amp installed) or a generic `shell-command` that the user configures? leaning toward `shell-command` with an amp preset
-3. **AGENTS.md hot threshold defaults**: what `minUsed` / `withinDays` values produce useful results? need to tune empirically after initial data collection
-4. **git commit in consolidation**: should the consolidation machine auto-commit to the commonplace repo? the syncthing setup might conflict with git — need to verify
-5. **defrag frequency**: daily seems right, but defrag is expensive (full corpus scan + LLM). should it be weekly? should it gate on "has anything changed since last defrag"?
-6. **axi-agent migration path**: how do existing `mem__YYYY_MM_DDTHH_MM__XXXXXX` entries get migrated to `id__XXXX` format? one-time migration script needed
+1. **commit hook template syntax**: deferred. will reference letta's blog posts for prior art on templating conventions
