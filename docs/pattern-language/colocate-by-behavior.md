@@ -72,10 +72,6 @@ src/
 
   cli/                # command handlers
     index.ts          # router
-    capture.ts
-    consolidate.ts
-    defrag.ts
-    ...
 ```
 
 **naming convention**: directories named by what the code DOES

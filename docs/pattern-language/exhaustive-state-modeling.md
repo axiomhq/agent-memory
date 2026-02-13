@@ -40,8 +40,4 @@ states: `loadQueue → fetchHistory → listExisting → runAgent → parseOutpu
 states: `scanEntries → runAgent → parseOutput → applyChanges → generateAgentsMd → commitChanges → completed | failed`
 
 **persistence adapter**: `src/persist/index.ts` — `MemoryPersistenceAdapter`
-interface with typed errors.
-
-**prompt builders**: `src/prompts/consolidate.ts`, `src/prompts/defrag.ts` —
-pure functions for building LLM prompts, with `parseConsolidationOutput()`
-and `parseDefragOutput()` validators.
+interface with typed errors via neverthrow.

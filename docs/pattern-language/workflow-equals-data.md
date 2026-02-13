@@ -27,13 +27,9 @@ it's waiting for. processes come and go; the record persists.
 **schema**: `src/schema.ts` — `MemoryEntryMetaSchema` and `JournalQueueEntrySchema`
 define the record shapes via arktype.
 
-**memory entries**: stored as markdown files with YAML frontmatter in
-`topics/` and `archive/`. each entry has stable `id__XXXXXX` identifier,
-usage tracking (`used`, `last_used`), and status lifecycle
-(`captured → consolidated → promoted`).
-
-**journal queue**: pending entries in `inbox/*.json`. processed entries
-moved to `inbox/.processed/`.
+**storage**: filesystem-based at `~/commonplace/01_files/_utilities/agent-memories/`.
+memory entries stored as markdown files with YAML frontmatter in
+`topics/` and `archive/`. journal queue entries stored as JSON in `inbox/`.
 
 **persistence**: `src/persist/filesystem.ts` — filesystem adapter with
 atomic write-rename for crash safety.

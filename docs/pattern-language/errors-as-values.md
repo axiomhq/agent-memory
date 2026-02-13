@@ -52,5 +52,3 @@ export interface MemoryPersistenceAdapter {
 - `src/journal.ts` — `JournalQueueError` tagged union
 - `src/format.ts` — `FormatError` tagged union
 - `src/service.ts` — chains neverthrow results
-
-no ADR exists — pattern adopted from axi-agent conventions.
