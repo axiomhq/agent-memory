@@ -62,7 +62,7 @@ export function parseMemoryMarkdown(
     });
   }
 
-  const body = text.slice(endIdx + HEADER_END.length).replace(/^\n+/, "");
+  const body = text.slice(endIdx + HEADER_END.length).replace(/^\n+/, "").trimEnd();
 
   return ok({ meta: validated, body });
 }

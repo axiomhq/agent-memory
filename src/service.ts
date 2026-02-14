@@ -40,14 +40,14 @@ export function createMemoryService(adapter: MemoryPersistenceAdapter): MemorySe
             meta: {
               id,
               title: input.title,
-              tags: input.tags ?? [],
+              ...(input.tags ? { tags: input.tags } : {}),
               status: "captured",
               used: 0,
               last_used: new Date().toISOString(),
               pinned: input.pinned ?? false,
               createdAt: now,
               updatedAt: now,
-              sources: input.sources,
+              ...(input.sources ? { sources: input.sources } : {}),
             },
             body: input.body,
           };
@@ -87,7 +87,7 @@ export function createMemoryService(adapter: MemoryPersistenceAdapter): MemorySe
           },
           body: entry.body,
         };
-        return adapter.write(updated).map(() => entry);
+        return adapter.write(updated).map(() => updated);
       });
     },
 
