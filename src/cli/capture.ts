@@ -41,7 +41,7 @@ export async function run(args: string[]) {
     },
     context: {
       cwd: values.cwd ?? process.cwd(),
-      repo: values.repo,
+      ...(values.repo ? { repo: values.repo } : {}),
     },
   };
 

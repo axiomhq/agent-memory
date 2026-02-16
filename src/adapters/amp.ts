@@ -27,7 +27,7 @@ export async function writeAmpJournalEntry(
     },
     context: {
       cwd,
-      repo,
+      ...(repo ? { repo } : {}),
     },
   };
 

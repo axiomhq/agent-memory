@@ -239,6 +239,75 @@ consumed as a **git submodule** by axi-agent and as a **nix flake** by personal 
 - [ ] all values have sensible defaults (zero-config works)
 - [ ] typecheck passes
 
+### US-013: Adapter Unit Tests
+**Description:** As a developer, I want unit tests for all adapters so that I/O boundaries are verified in isolation.
+
+**Acceptance Criteria:**
+- [ ] `test/adapters-shell.test.ts` tests `executeShellLLM()`:
+  - pipes prompt to stdin, captures stdout
+  - handles non-zero exit codes
+  - handles timeout
+- [ ] `test/adapters-amp.test.ts` tests amp harness adapter:
+  - `writeJournalEntry()` writes valid JSON to inbox
+  - `fetchHistory()` invokes `amp thread read` CLI
+  - handles missing thread gracefully
+- [ ] tests use mocks for external commands (no real `amp` or shell invocation)
+- [ ] typecheck passes
+
+### US-014: CLI Command Tests
+**Description:** As a developer, I want tests for each CLI command so that the user interface layer is verified.
+
+**Acceptance Criteria:**
+- [ ] `test/cli-capture.test.ts` tests `memory capture`:
+  - writes journal entry to inbox
+  - validates required flags
+  - exits 0 on success, non-zero on failure
+- [ ] `test/cli-list.test.ts` tests `memory list`:
+  - lists entries with metadata
+  - filters by status
+  - handles empty corpus
+- [ ] `test/cli-read.test.ts` tests `memory read <id>`:
+  - prints full entry
+  - increments used counter
+  - handles missing entry
+- [ ] `test/cli-consolidate.test.ts` tests `memory consolidate`:
+  - runs machine with injected adapters
+  - prints summary
+- [ ] `test/cli-defrag.test.ts` tests `memory defrag`:
+  - runs machine with injected adapters
+  - prints summary
+- [ ] `test/cli-doctor.test.ts` tests `memory doctor`:
+  - detects orphaned cross-links
+  - detects schema violations
+  - exits 0 when healthy
+- [ ] `test/cli-generate-agents-md.test.ts` tests `memory generate-agents-md`:
+  - writes to target file
+  - replaces existing section
+- [ ] tests use temp directories for filesystem isolation
+- [ ] typecheck passes
+
+### US-015: Integration Tests
+**Description:** As a developer, I want end-to-end tests that exercise the full pipeline so that the system works as a whole.
+
+**Acceptance Criteria:**
+- [ ] `test/integration-consolidate.test.ts`:
+  - creates journal entries in inbox
+  - runs `memory consolidate` CLI
+  - verifies memory entries written to topics/
+  - verifies journal entries moved to .processed/
+- [ ] `test/integration-defrag.test.ts`:
+  - creates memory entries
+  - runs `memory defrag` CLI
+  - verifies AGENTS.md generated with hot/warm tiers
+- [ ] `test/integration-roundtrip.test.ts`:
+  - captures via `memory capture`
+  - consolidates via `memory consolidate`
+  - reads via `memory read`
+  - verifies used counter increments
+- [ ] tests use isolated temp directories
+- [ ] tests are hermetic (no external dependencies)
+- [ ] typecheck passes
+
 ## Functional Requirements
 
 - FR-1: journal queue entries are validated against arktype schema at write time; malformed entries are rejected with structured errors
