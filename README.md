@@ -170,7 +170,7 @@ the original system was a flat folder of date-prefixed markdown files. three fai
 
 1. **keyword-dependent retrieval**: if you don't guess the right keyword, the memory doesn't exist
 2. **no hot memory**: nothing is always-in-context; everything requires explicit grep
-3. **no progressive disclosure**: 28+ files, no navigational signal, no tiering
+3. **no progressive disclosure**: no navigational signal, no tiering
 
 agent-memory replaces this with structured consolidation and tiered disclosure. your agent starts with context, not a grep command.
 
