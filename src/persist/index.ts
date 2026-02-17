@@ -12,6 +12,7 @@ export interface MemoryListFilter {
   query?: string;
   limit?: number;
   tags?: string[];
+  org?: string;
 }
 
 export interface MemoryPersistenceAdapter {

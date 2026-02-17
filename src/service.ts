@@ -14,6 +14,7 @@ export interface CaptureInput {
   tags?: string[];
   pinned?: boolean;
   sources?: MemoryEntryMeta["sources"];
+  org?: string;
 }
 
 export interface MemoryService {
@@ -48,6 +49,7 @@ export function createMemoryService(adapter: MemoryPersistenceAdapter): MemorySe
               createdAt: now,
               updatedAt: now,
               ...(input.sources ? { sources: input.sources } : {}),
+              ...(input.org ? { org: input.org } : {}),
             },
             body: input.body,
           };

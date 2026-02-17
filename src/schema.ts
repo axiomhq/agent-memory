@@ -37,6 +37,8 @@ const MemorySourcesSchema = type({
   "cwd?": "string",
 });
 
+const SAFE_ORG_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
+
 export const MemoryEntryMetaSchema = type({
   id: type("string").matching(ID_PATTERN),
   title: "string >= 1",
@@ -48,6 +50,7 @@ export const MemoryEntryMetaSchema = type({
   createdAt: "number",
   updatedAt: "number",
   "sources?": MemorySourcesSchema,
+  "org?": type("string").matching(SAFE_ORG_PATTERN),
 });
 
 export type MemoryEntryMeta = typeof MemoryEntryMetaSchema.infer;

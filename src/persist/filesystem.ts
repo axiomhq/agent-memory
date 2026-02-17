@@ -1,6 +1,8 @@
 /**
  * file-based memory persistence adapter.
- * directory layout: inbox/, topics/, archive/
+ * directory layout:
+ *   - root level: topics/, archive/ (personal, no org)
+ *   - org-scoped: orgs/{org}/topics/, orgs/{org}/archive/
  * filename convention: descriptive-title -- topic__x topic__y id__XXXXXX.md
  */
 
@@ -75,17 +77,52 @@ function readEntriesFromDir(dir: string): Array<{ meta: MemoryEntryMeta; filePat
 
 const TOPICS_DIR = "topics";
 const ARCHIVE_DIR = "archive";
+const ORGS_DIR = "orgs";
 
 export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions): MemoryPersistenceAdapter {
   const opts: Required<FileAdapterOptions> = {
     rootDir: options.rootDir,
   };
 
-  const topicsDir = join(opts.rootDir, TOPICS_DIR);
-  const archiveDir = join(opts.rootDir, ARCHIVE_DIR);
+  function getTopicsDir(org?: string): string {
+    if (org) {
+      return join(opts.rootDir, ORGS_DIR, org, TOPICS_DIR);
+    }
+    return join(opts.rootDir, TOPICS_DIR);
+  }
+
+  function getArchiveDir(org?: string): string {
+    if (org) {
+      return join(opts.rootDir, ORGS_DIR, org, ARCHIVE_DIR);
+    }
+    return join(opts.rootDir, ARCHIVE_DIR);
+  }
+
+  function getOrgsDirs(): string[] {
+    const orgsDir = join(opts.rootDir, ORGS_DIR);
+    if (!existsSync(orgsDir)) return [];
+    
+    const orgs: string[] = [];
+    for (const entry of readdirSync(orgsDir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        orgs.push(entry.name);
+      }
+    }
+    return orgs;
+  }
 
   function findEntryFile(id: string): string | null {
-    for (const dir of [topicsDir, archiveDir]) {
+    const orgs = getOrgsDirs();
+    
+    const allDirs: string[] = [];
+    allDirs.push(getTopicsDir());
+    allDirs.push(getArchiveDir());
+    for (const org of orgs) {
+      allDirs.push(getTopicsDir(org));
+      allDirs.push(getArchiveDir(org));
+    }
+
+    for (const dir of allDirs) {
       if (!existsSync(dir)) continue;
       for (const file of readdirSync(dir)) {
         if (file.includes(id)) {
@@ -102,8 +139,14 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
         (async () => {
           let entries: MemoryEntryMeta[] = [];
 
-          for (const dir of [topicsDir, archiveDir]) {
-            entries.push(...readEntriesFromDir(dir).map((e) => e.meta));
+          if (filter?.org) {
+            for (const dir of [getTopicsDir(filter.org), getArchiveDir(filter.org)]) {
+              entries.push(...readEntriesFromDir(dir).map((e) => e.meta));
+            }
+          } else {
+            for (const dir of [getTopicsDir(), getArchiveDir()]) {
+              entries.push(...readEntriesFromDir(dir).map((e) => e.meta));
+            }
           }
 
           if (filter?.status) {
@@ -195,7 +238,7 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
 
       return ResultAsync.fromPromise(
         (async () => {
-          const targetDir = meta.status === "promoted" ? topicsDir : topicsDir;
+          const targetDir = getTopicsDir(meta.org);
           if (!existsSync(targetDir)) {
             mkdirSync(targetDir, { recursive: true });
           }
