@@ -43,7 +43,7 @@ describe("journal", () => {
     });
 
     test("rejects invalid entry", () => {
-      const entry = { version: "2" } as JournalQueueEntry;
+      const entry = { version: "2" } as unknown as JournalQueueEntry;
       const result = writeJournalEntry(entry, { inboxDir });
 
       expect(result.isErr()).toBe(true);

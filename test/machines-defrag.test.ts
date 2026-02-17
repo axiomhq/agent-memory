@@ -434,7 +434,7 @@ describe("defrag machine", () => {
 
       const { providers: freshProviders } = createTestProviders({ entries: [] });
       const freshProvided = defragMachine.provide(freshProviders);
-      const restoredActor = createActor(freshProvided, { snapshot: snapshotJson });
+      const restoredActor = createActor(freshProvided, { snapshot: snapshotJson, input: {} });
 
       expect(restoredActor.getSnapshot().value).toBe("completed");
       expect(restoredActor.getSnapshot().context.entries).toHaveLength(1);

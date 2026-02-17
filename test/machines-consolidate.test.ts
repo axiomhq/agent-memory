@@ -382,7 +382,7 @@ describe("consolidate machine", () => {
 
       const freshProviders = createTestProviders({ queueEntries: [], agentOutput: "[]" });
       const freshProvided = consolidateMachine.provide(freshProviders);
-      const restoredActor = createActor(freshProvided, { snapshot: snapshotJson });
+      const restoredActor = createActor(freshProvided, { snapshot: snapshotJson, input: { limit: 50 } });
 
       expect(restoredActor.getSnapshot().value).toBe("completed");
       expect(restoredActor.getSnapshot().context.limit).toBe(50);
