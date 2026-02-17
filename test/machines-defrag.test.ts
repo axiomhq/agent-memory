@@ -89,7 +89,7 @@ describe("defrag machine", () => {
         used: 5,
         last_used: "2024-01-15",
         pinned: false,
-        status: "active",
+        status: "promoted",
       },
     ];
     const agentOutput = JSON.stringify({
@@ -119,7 +119,7 @@ describe("defrag machine", () => {
         used: 3,
         last_used: "2024-01-15",
         pinned: false,
-        status: "active",
+        status: "promoted",
       },
     ];
 
@@ -154,7 +154,7 @@ describe("defrag machine", () => {
         used: 1,
         last_used: "2024-01-15",
         pinned: false,
-        status: "active",
+        status: "promoted",
       },
     ];
 
@@ -178,7 +178,7 @@ describe("defrag machine", () => {
         used: 1,
         last_used: "2024-01-15",
         pinned: false,
-        status: "active",
+        status: "promoted",
       },
     ];
     const agentOutput = JSON.stringify({
@@ -207,7 +207,7 @@ describe("defrag machine", () => {
         used: 1,
         last_used: "2024-01-15",
         pinned: false,
-        status: "active",
+        status: "promoted",
       },
     ];
 
@@ -231,7 +231,7 @@ describe("defrag machine", () => {
         used: 10,
         last_used: "2024-01-20",
         pinned: true,
-        status: "active",
+        status: "promoted",
       },
       {
         id: "id__002",
@@ -241,7 +241,7 @@ describe("defrag machine", () => {
         used: 3,
         last_used: "2024-01-10",
         pinned: false,
-        status: "active",
+        status: "promoted",
       },
     ];
     const agentOutput = JSON.stringify({
@@ -274,7 +274,7 @@ describe("defrag machine", () => {
         used: 1,
         last_used: "2024-01-15",
         pinned: false,
-        status: "active",
+        status: "promoted",
       },
     ];
 
@@ -297,7 +297,7 @@ describe("defrag machine", () => {
         used: 1,
         last_used: "2024-01-15",
         pinned: false,
-        status: "active",
+        status: "promoted",
       },
     ];
 
@@ -312,9 +312,9 @@ describe("defrag machine", () => {
 
   it("handles multiple actions in agent output", async () => {
     const entries: EntryForDefrag[] = [
-      { id: "id__001", title: "a", body: "content a", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "active" },
-      { id: "id__002", title: "b", body: "content b", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "active" },
-      { id: "id__003", title: "c", body: "content c", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "active" },
+      { id: "id__001", title: "a", body: "content a", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "promoted" },
+      { id: "id__002", title: "b", body: "content b", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "promoted" },
+      { id: "id__003", title: "c", body: "content c", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "promoted" },
     ];
     const agentOutput = JSON.stringify({
       actions: [
@@ -338,8 +338,8 @@ describe("defrag machine", () => {
 
   it("handles merge action from agent", async () => {
     const entries: EntryForDefrag[] = [
-      { id: "id__001", title: "auth a", body: "content a", tags: ["auth"], used: 2, last_used: "2024-01-15", pinned: false, status: "active" },
-      { id: "id__002", title: "auth b", body: "content b", tags: ["auth"], used: 3, last_used: "2024-01-16", pinned: false, status: "active" },
+      { id: "id__001", title: "auth a", body: "content a", tags: ["auth"], used: 2, last_used: "2024-01-15", pinned: false, status: "promoted" },
+      { id: "id__002", title: "auth b", body: "content b", tags: ["auth"], used: 3, last_used: "2024-01-16", pinned: false, status: "promoted" },
     ];
     const agentOutput = JSON.stringify({
       actions: [
@@ -361,7 +361,7 @@ describe("defrag machine", () => {
 
   it("handles split action from agent", async () => {
     const entries: EntryForDefrag[] = [
-      { id: "id__big", title: "large note", body: "very long content...", tags: [], used: 5, last_used: "2024-01-15", pinned: false, status: "active" },
+      { id: "id__big", title: "large note", body: "very long content...", tags: [], used: 5, last_used: "2024-01-15", pinned: false, status: "promoted" },
     ];
     const agentOutput = JSON.stringify({
       actions: [
@@ -391,7 +391,7 @@ describe("defrag machine", () => {
   describe("WORKFLOW = DATA: snapshot serialization", () => {
     it("context is JSON-serializable (no functions)", async () => {
       const entries: EntryForDefrag[] = [
-        { id: "id__001", title: "test", body: "content", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "active" },
+        { id: "id__001", title: "test", body: "content", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "promoted" },
       ];
       const agentOutput = JSON.stringify({
         actions: [{ type: "rename", id: "id__001", newTitle: "renamed" }],
@@ -415,7 +415,7 @@ describe("defrag machine", () => {
 
     it("can restore from snapshot with fresh provide()", async () => {
       const entries: EntryForDefrag[] = [
-        { id: "id__001", title: "test", body: "content", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "active" },
+        { id: "id__001", title: "test", body: "content", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "promoted" },
       ];
       const agentOutput = JSON.stringify({
         actions: [{ type: "rename", id: "id__001", newTitle: "renamed" }],

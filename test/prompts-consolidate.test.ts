@@ -69,10 +69,10 @@ describe("parseConsolidationOutput", () => {
     const result = parseConsolidationOutput(raw);
 
     expect(result).toHaveLength(2);
-    expect(result[0].title).toBe("entry 1");
-    expect(result[0].body).toBe("body 1");
-    expect(result[0].tags).toEqual(["topic__a"]);
-    expect(result[1].tags).toEqual([]);
+    expect(result[0]!.title).toBe("entry 1");
+    expect(result[0]!.body).toBe("body 1");
+    expect(result[0]!.tags).toEqual(["topic__a"]);
+    expect(result[1]!.tags).toEqual([]);
   });
 
   it("strips markdown code fence", () => {
@@ -81,7 +81,7 @@ describe("parseConsolidationOutput", () => {
     const result = parseConsolidationOutput(raw);
 
     expect(result).toHaveLength(1);
-    expect(result[0].title).toBe("t");
+    expect(result[0]!.title).toBe("t");
   });
 
   it("strips code fence without language", () => {
@@ -129,7 +129,7 @@ describe("parseConsolidationOutput", () => {
 
     const result = parseConsolidationOutput(raw);
 
-    expect(result[0].tags).toEqual(["valid", "also-valid"]);
+    expect(result[0]!.tags).toEqual(["valid", "also-valid"]);
   });
 
   it("handles missing tags field", () => {
@@ -137,7 +137,7 @@ describe("parseConsolidationOutput", () => {
 
     const result = parseConsolidationOutput(raw);
 
-    expect(result[0].tags).toEqual([]);
+    expect(result[0]!.tags).toEqual([]);
   });
 });
 
@@ -150,8 +150,8 @@ describe("resolveIntraBatchLinks", () => {
 
     const resolved = resolveIntraBatchLinks(entries);
 
-    expect(resolved[0].body).toBe("content [[id__bbb222]]");
-    expect(resolved[1].body).toBe("content [[id__aaa111]]");
+    expect(resolved[0]!.body).toBe("content [[id__bbb222]]");
+    expect(resolved[1]!.body).toBe("content [[id__aaa111]]");
   });
 
   it("leaves unresolved pending links intact", () => {
@@ -161,7 +161,7 @@ describe("resolveIntraBatchLinks", () => {
 
     const resolved = resolveIntraBatchLinks(entries);
 
-    expect(resolved[0].body).toBe("see [[pending:missing entry]]");
+    expect(resolved[0]!.body).toBe("see [[pending:missing entry]]");
   });
 
   it("handles case-insensitive title matching", () => {
@@ -171,7 +171,7 @@ describe("resolveIntraBatchLinks", () => {
 
     const resolved = resolveIntraBatchLinks(entries);
 
-    expect(resolved[0].body).toBe("see [[id__aaa111]]");
+    expect(resolved[0]!.body).toBe("see [[id__aaa111]]");
   });
 
   it("preserves regular id links", () => {
@@ -181,7 +181,7 @@ describe("resolveIntraBatchLinks", () => {
 
     const resolved = resolveIntraBatchLinks(entries);
 
-    expect(resolved[0].body).toBe("see [[id__xyz789]] for more");
+    expect(resolved[0]!.body).toBe("see [[id__xyz789]] for more");
   });
 
   it("resolves multiple pending links in one body", () => {
@@ -193,6 +193,6 @@ describe("resolveIntraBatchLinks", () => {
 
     const resolved = resolveIntraBatchLinks(entries);
 
-    expect(resolved[2].body).toBe("links: [[id__aaa111]] and [[id__bbb222]]");
+    expect(resolved[2]!.body).toBe("links: [[id__aaa111]] and [[id__bbb222]]");
   });
 });

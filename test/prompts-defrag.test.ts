@@ -16,7 +16,7 @@ describe("buildDefragPrompt", () => {
         used: 5,
         last_used: "2024-01-15",
         pinned: false,
-        status: "active",
+        status: "promoted",
       },
     ];
 
@@ -40,7 +40,7 @@ describe("buildDefragPrompt", () => {
         used: 1,
         last_used: "2024-01-01",
         pinned: false,
-        status: "active",
+        status: "promoted",
       },
     ];
 
@@ -60,7 +60,7 @@ describe("buildDefragPrompt", () => {
         used: 1,
         last_used: "2024-01-01",
         pinned: false,
-        status: "active",
+        status: "promoted",
       },
     ];
 
@@ -80,7 +80,7 @@ describe("buildDefragPrompt", () => {
         used: 10,
         last_used: "2024-01-20",
         pinned: true,
-        status: "active",
+        status: "promoted",
       },
     ];
 
@@ -128,7 +128,7 @@ describe("buildDefragPrompt", () => {
         used: 1,
         last_used: "2024-01-01",
         pinned: false,
-        status: "active",
+        status: "promoted",
       },
       {
         id: "id__two",
@@ -138,7 +138,7 @@ describe("buildDefragPrompt", () => {
         used: 2,
         last_used: "2024-01-02",
         pinned: false,
-        status: "active",
+        status: "promoted",
       },
     ];
 
