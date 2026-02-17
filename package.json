@@ -2,6 +2,15 @@
   "name": "agent-memory",
   "version": "0.1.0",
   "type": "module",
+  "exports": {
+    "./service": "./src/service.ts",
+    "./persist/filesystem": "./src/persist/filesystem.ts",
+    "./persist": "./src/persist/index.ts",
+    "./schema": "./src/schema.ts",
+    "./format": "./src/format.ts",
+    "./id": "./src/id.ts",
+    "./journal": "./src/journal.ts"
+  },
   "bin": {
     "memory": "./src/cli/index.ts"
   },
