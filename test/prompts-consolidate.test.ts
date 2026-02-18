@@ -155,6 +155,27 @@ describe("parseConsolidationOutput", () => {
     expect(result[0]!.title).toBe("t");
   });
 
+  it("extracts empty array from prose containing [[wiki-links]]", () => {
+    const raw = `All three threads contain already-covered knowledge (entries like [[id__439Y7t]], [[id__CewF7J]], [[id__AbkZ5V]]). Nothing new to extract.
+
+[]`;
+
+    const result = parseConsolidationOutput(raw);
+
+    expect(result).toEqual([]);
+  });
+
+  it("extracts entries from prose containing [[wiki-links]]", () => {
+    const raw = `Based on existing entries [[id__abc123]] and [[id__def456]], here is one new note:
+
+[{"title": "new pattern", "body": "see also [[id__abc123]]", "tags": ["topic__test"]}]`;
+
+    const result = parseConsolidationOutput(raw);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.title).toBe("new pattern");
+  });
+
   it("throws on invalid JSON", () => {
     expect(() => parseConsolidationOutput("not json")).toThrow(
       "agent output is not valid JSON",

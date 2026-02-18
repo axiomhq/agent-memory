@@ -118,15 +118,21 @@ function extractJsonArray(raw: string): unknown {
     }
   }
 
-  // find first [ and last ] — extracts JSON array from prose wrapping
-  const firstBracket = trimmed.indexOf("[");
-  const lastBracket = trimmed.lastIndexOf("]");
-  if (firstBracket !== -1 && lastBracket > firstBracket) {
-    const candidate = trimmed.slice(firstBracket, lastBracket + 1);
-    try {
-      return JSON.parse(candidate);
-    } catch {
-      // all extraction strategies failed
+  // find JSON array via bracket matching — search from the end to skip
+  // wiki-link noise like [[id__XXXXXX]] that confuses greedy first-[ search.
+  for (let end = trimmed.length - 1; end >= 0; end--) {
+    if (trimmed[end] !== "]") continue;
+    let depth = 0;
+    for (let start = end; start >= 0; start--) {
+      if (trimmed[start] === "]") depth++;
+      else if (trimmed[start] === "[") depth--;
+      if (depth === 0) {
+        try {
+          return JSON.parse(trimmed.slice(start, end + 1));
+        } catch {
+          break; // this balanced pair isn't valid JSON, try earlier ]
+        }
+      }
     }
   }
 
