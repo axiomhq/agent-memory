@@ -55,7 +55,7 @@ const listExistingActor = fromPromise<ExistingEntryRef[], void>(async () => {
 
 const runAgentActor = fromPromise<
   string,
-  { journals: JournalForPrompt[]; existingEntries: ExistingEntryRef[] }
+  { journals: JournalForPrompt[]; existingEntries: ExistingEntryRef[]; historyContent: string }
 >(async () => {
   throw new Error("runAgent: not provided via machine.provide()");
 });
@@ -261,6 +261,7 @@ export const consolidateMachine = setup({
         input: ({ context }) => ({
           journals: context.journals,
           existingEntries: context.existingEntries,
+          historyContent: context.historyContent,
         }),
         onDone: {
           target: "parseOutput",

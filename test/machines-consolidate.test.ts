@@ -64,7 +64,7 @@ function createTestProviders(overrides: {
 
       runAgent: fromPromise<
         string,
-        { journals: JournalForPrompt[]; existingEntries: ExistingEntryRef[] }
+        { journals: JournalForPrompt[]; existingEntries: ExistingEntryRef[]; historyContent: string }
       >(async () => {
         if (overrides.agentError) throw new Error("agent failed");
         return agentOutput;

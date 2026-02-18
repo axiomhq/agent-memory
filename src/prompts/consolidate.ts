@@ -19,6 +19,7 @@ export interface ExistingEntryRef {
 export function buildConsolidationPrompt(
   journals: JournalForPrompt[],
   existingEntries: ExistingEntryRef[],
+  historyContent?: string,
 ): string {
   const existingSection =
     existingEntries.length > 0
@@ -31,6 +32,11 @@ export function buildConsolidationPrompt(
       return `### ${j.id}: "${j.title}"${tags}\n\n${j.body}`;
     })
     .join("\n\n---\n\n");
+
+  const historySection =
+    historyContent && historyContent.trim().length > 0
+      ? `## Thread history (full conversation content)\n\n${historyContent}`
+      : "";
 
   return `You are consolidating raw journal entries into a curated knowledge base.
 
@@ -47,6 +53,7 @@ ${existingSection}
 ## Journal entries to consolidate
 
 ${journalSection}
+${historySection ? `\n${historySection}` : ""}
 
 ## Instructions
 

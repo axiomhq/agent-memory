@@ -57,6 +57,34 @@ describe("buildConsolidationPrompt", () => {
     expect(prompt).toContain("[[id__XXXXXX]]");
     expect(prompt).toContain("SINGLE concept");
   });
+
+  it("includes thread history when provided", () => {
+    const journals: JournalForPrompt[] = [
+      { id: "q__abc123", title: "test entry", body: "some content", tags: [] },
+    ];
+    const history = "## Thread T-abc\n\nUser: fix the auth bug\nAssistant: done";
+
+    const prompt = buildConsolidationPrompt(journals, [], history);
+
+    expect(prompt).toContain("Thread history");
+    expect(prompt).toContain("fix the auth bug");
+  });
+
+  it("omits thread history section when empty", () => {
+    const journals: JournalForPrompt[] = [
+      { id: "q__abc123", title: "test entry", body: "some content", tags: [] },
+    ];
+
+    const prompt = buildConsolidationPrompt(journals, [], "");
+
+    expect(prompt).not.toContain("Thread history");
+  });
+
+  it("omits thread history section when undefined", () => {
+    const prompt = buildConsolidationPrompt([], []);
+
+    expect(prompt).not.toContain("Thread history");
+  });
 });
 
 describe("parseConsolidationOutput", () => {
