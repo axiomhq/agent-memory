@@ -71,7 +71,7 @@ If a journal entry contains multiple distinct learnings, split them into separat
 If two journal entries describe the same concept, merge into one note.
 If a journal entry contains no durable knowledge (e.g., "started working on X"), skip it.
 
-Respond with ONLY a JSON array. No markdown fencing, no explanation:
+CRITICAL: Your entire response must be ONLY a raw JSON array. No prose, no explanation, no markdown fencing. Start your response with [ and end with ]. Any text outside the JSON array will cause a parse failure.
 
 [
   {
@@ -81,7 +81,7 @@ Respond with ONLY a JSON array. No markdown fencing, no explanation:
   }
 ]
 
-If there is nothing worth extracting, respond with an empty array: []`;
+If there is nothing worth extracting, respond with: []`;
 }
 
 export interface ParsedKbEntry {
@@ -90,19 +90,51 @@ export interface ParsedKbEntry {
   tags: string[];
 }
 
-export function parseConsolidationOutput(raw: string): ParsedKbEntry[] {
-  let cleaned = raw.trim();
+/**
+ * extracts a JSON array from LLM output that may contain prose preamble,
+ * markdown code fences, or other non-JSON wrapping.
+ *
+ * strategy: try raw parse → strip code fences → find outermost [ ] brackets.
+ * the bracket fallback handles the common LLM failure mode of prefixing
+ * "Here are the entries:" before the actual JSON.
+ */
+function extractJsonArray(raw: string): unknown {
+  const trimmed = raw.trim();
 
-  if (cleaned.startsWith("```")) {
-    cleaned = cleaned.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-  }
-
-  let parsed: unknown;
+  // fast path: raw output is already valid JSON
   try {
-    parsed = JSON.parse(cleaned);
+    return JSON.parse(trimmed);
   } catch {
-    throw new Error(`agent output is not valid JSON: ${cleaned.slice(0, 200)}`);
+    // continue to fallbacks
   }
+
+  // strip markdown code fences (```json ... ``` or ``` ... ```)
+  const fenceMatch = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+  if (fenceMatch) {
+    try {
+      return JSON.parse(fenceMatch[1]!);
+    } catch {
+      // continue to bracket extraction
+    }
+  }
+
+  // find first [ and last ] — extracts JSON array from prose wrapping
+  const firstBracket = trimmed.indexOf("[");
+  const lastBracket = trimmed.lastIndexOf("]");
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    const candidate = trimmed.slice(firstBracket, lastBracket + 1);
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // all extraction strategies failed
+    }
+  }
+
+  throw new Error(`agent output is not valid JSON: ${trimmed.slice(0, 200)}`);
+}
+
+export function parseConsolidationOutput(raw: string): ParsedKbEntry[] {
+  const parsed = extractJsonArray(raw);
 
   if (!Array.isArray(parsed)) {
     throw new Error(`agent output is not an array: ${typeof parsed}`);

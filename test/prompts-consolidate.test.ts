@@ -126,6 +126,35 @@ describe("parseConsolidationOutput", () => {
     expect(result).toEqual([]);
   });
 
+  it("extracts JSON from prose preamble", () => {
+    const raw = `The two journal entries map to threads T-abc and T-def. Here are the extracted notes:
+
+[{"title": "auth gotcha", "body": "webhook needs raw body", "tags": ["topic__auth"]}]`;
+
+    const result = parseConsolidationOutput(raw);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.title).toBe("auth gotcha");
+  });
+
+  it("extracts JSON from prose preamble and epilogue", () => {
+    const raw = `Here are the notes:\n\n[{"title": "t", "body": "b", "tags": []}]\n\nLet me know if you need changes.`;
+
+    const result = parseConsolidationOutput(raw);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.title).toBe("t");
+  });
+
+  it("extracts JSON from markdown code fence mid-text", () => {
+    const raw = `Here are the entries:\n\n\`\`\`json\n[{"title": "t", "body": "b", "tags": []}]\n\`\`\`\n\nDone.`;
+
+    const result = parseConsolidationOutput(raw);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.title).toBe("t");
+  });
+
   it("throws on invalid JSON", () => {
     expect(() => parseConsolidationOutput("not json")).toThrow(
       "agent output is not valid JSON",
