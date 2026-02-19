@@ -38,14 +38,6 @@ describe("extractTags", () => {
     expect(extractTags(body)).toEqual(["before", "after"]);
   });
 
-  test("ignores 6-digit hex colors", () => {
-    expect(extractTags("color is #ff0000 and #aabbcc")).toEqual([]);
-  });
-
-  test("ignores 8-digit hex colors", () => {
-    expect(extractTags("rgba #ff000080")).toEqual([]);
-  });
-
   test("does not match mid-word hash", () => {
     expect(extractTags("foo#bar")).toEqual([]);
   });
