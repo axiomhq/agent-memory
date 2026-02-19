@@ -268,6 +268,111 @@ describe("service + persistence", () => {
     });
   });
 
+  describe("links", () => {
+    test("returns outbound links from entry body", async () => {
+      const a = await service.capture({ title: "A", body: "standalone", tags: [] });
+      if (!a.isOk()) return;
+
+      const b = await service.capture({
+        title: "B",
+        body: `links to [[${a.value.meta.id}|A]] here`,
+        tags: [],
+      });
+      if (!b.isOk()) return;
+
+      const result = await service.links(b.value.meta.id);
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+
+      expect(result.value.outbound).toHaveLength(1);
+      expect(result.value.outbound[0]!.id).toBe(a.value.meta.id);
+      expect(result.value.outbound[0]!.displayText).toBe("A");
+    });
+
+    test("returns inbound links pointing to entry", async () => {
+      const a = await service.capture({ title: "A", body: "standalone", tags: [] });
+      if (!a.isOk()) return;
+
+      const b = await service.capture({
+        title: "B",
+        body: `links to [[${a.value.meta.id}|A]]`,
+        tags: [],
+      });
+      if (!b.isOk()) return;
+
+      const result = await service.links(a.value.meta.id);
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+
+      expect(result.value.inbound).toHaveLength(1);
+      expect(result.value.inbound[0]!.id).toBe(b.value.meta.id);
+      expect(result.value.inbound[0]!.title).toBe("B");
+      expect(result.value.outbound).toHaveLength(0);
+    });
+  });
+
+  describe("orphans", () => {
+    test("returns entries with no inbound links", async () => {
+      const a = await service.capture({ title: "A", body: "no links to me", tags: [] });
+      if (!a.isOk()) return;
+
+      const b = await service.capture({ title: "B", body: "also alone", tags: [] });
+      if (!b.isOk()) return;
+
+      const c = await service.capture({
+        title: "C",
+        body: `links to [[${a.value.meta.id}|A]]`,
+        tags: [],
+      });
+      if (!c.isOk()) return;
+
+      const result = await service.orphans();
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+
+      // B and C are orphans (no one links to them). A has an inbound link from C.
+      expect(result.value).toContain(b.value.meta.id);
+      expect(result.value).toContain(c.value.meta.id);
+      expect(result.value).not.toContain(a.value.meta.id);
+    });
+  });
+
+  describe("brokenLinks", () => {
+    test("detects links to nonexistent entries", async () => {
+      const a = await service.capture({
+        title: "A",
+        body: "links to [[id__zzzzzz|ghost]]",
+        tags: [],
+      });
+      if (!a.isOk()) return;
+
+      const result = await service.brokenLinks();
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0]!.sourceId).toBe(a.value.meta.id);
+      expect(result.value[0]!.targetId).toBe("id__zzzzzz");
+    });
+
+    test("returns empty when all links are valid", async () => {
+      const a = await service.capture({ title: "A", body: "a content", tags: [] });
+      if (!a.isOk()) return;
+
+      await service.capture({
+        title: "B",
+        body: `links to [[${a.value.meta.id}|A]]`,
+        tags: [],
+      });
+
+      const result = await service.brokenLinks();
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+
+      expect(result.value).toHaveLength(0);
+    });
+  });
+
   describe("remove", () => {
     test("deletes entry", async () => {
       const created = await service.capture({ title: "To Delete", body: "body" });

@@ -32,6 +32,12 @@ export interface MemoryService {
   ): ResultAsync<void, MemoryPersistenceError>;
   updateBody(id: string, body: string): ResultAsync<void, MemoryPersistenceError>;
   rename(id: string, newTitle: string): ResultAsync<{ updatedInboundLinks: number }, MemoryPersistenceError>;
+  links(id: string): ResultAsync<{
+    inbound: Array<{ id: string; title: string }>;
+    outbound: Array<{ id: string; displayText: string }>;
+  }, MemoryPersistenceError>;
+  orphans(): ResultAsync<string[], MemoryPersistenceError>;
+  brokenLinks(): ResultAsync<Array<{ sourceId: string; targetId: string }>, MemoryPersistenceError>;
 }
 
 export function createMemoryService(adapter: MemoryPersistenceAdapter): MemoryService {
@@ -182,6 +188,100 @@ export function createMemoryService(adapter: MemoryPersistenceAdapter): MemorySe
             message: e instanceof Error ? e.message : String(e),
           };
         },
+      );
+    },
+
+    links(id: string) {
+      return ResultAsync.fromPromise(
+        (async () => {
+          // outbound: links in this entry's body
+          const readResult = await adapter.read(id);
+          if (readResult.isErr()) throw readResult.error;
+          const outbound = extractLinks(readResult.value.body).map((l) => ({
+            id: l.id,
+            displayText: l.displayText,
+          }));
+
+          // inbound: other entries that link to this id
+          const allEntries = await adapter.list();
+          if (allEntries.isErr()) throw allEntries.error;
+
+          const inbound: Array<{ id: string; title: string }> = [];
+          for (const meta of allEntries.value) {
+            if (meta.id === id) continue;
+            const otherResult = await adapter.read(meta.id);
+            if (otherResult.isErr()) continue;
+            const otherLinks = extractLinks(otherResult.value.body);
+            if (otherLinks.some((l) => l.id === id)) {
+              inbound.push({ id: meta.id, title: meta.title });
+            }
+          }
+
+          return { inbound, outbound };
+        })(),
+        (e): MemoryPersistenceError => ({
+          _tag: "memory.persist.read",
+          path: id,
+          message: e instanceof Error ? e.message : String(e),
+        }),
+      );
+    },
+
+    orphans() {
+      return ResultAsync.fromPromise(
+        (async () => {
+          const allEntries = await adapter.list();
+          if (allEntries.isErr()) throw allEntries.error;
+
+          // build set of all ids that are linked to from any entry
+          const linkedTo = new Set<string>();
+          for (const meta of allEntries.value) {
+            const readResult = await adapter.read(meta.id);
+            if (readResult.isErr()) continue;
+            for (const link of extractLinks(readResult.value.body)) {
+              linkedTo.add(link.id);
+            }
+          }
+
+          // orphans: entries with zero inbound links
+          return allEntries.value
+            .filter((meta) => !linkedTo.has(meta.id))
+            .map((meta) => meta.id);
+        })(),
+        (e): MemoryPersistenceError => ({
+          _tag: "memory.persist.read",
+          path: "",
+          message: e instanceof Error ? e.message : String(e),
+        }),
+      );
+    },
+
+    brokenLinks() {
+      return ResultAsync.fromPromise(
+        (async () => {
+          const allEntries = await adapter.list();
+          if (allEntries.isErr()) throw allEntries.error;
+
+          const existingIds = new Set(allEntries.value.map((m) => m.id));
+          const broken: Array<{ sourceId: string; targetId: string }> = [];
+
+          for (const meta of allEntries.value) {
+            const readResult = await adapter.read(meta.id);
+            if (readResult.isErr()) continue;
+            for (const link of extractLinks(readResult.value.body)) {
+              if (!existingIds.has(link.id)) {
+                broken.push({ sourceId: meta.id, targetId: link.id });
+              }
+            }
+          }
+
+          return broken;
+        })(),
+        (e): MemoryPersistenceError => ({
+          _tag: "memory.persist.read",
+          path: "",
+          message: e instanceof Error ? e.message : String(e),
+        }),
       );
     },
   };
