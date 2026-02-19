@@ -38,11 +38,9 @@ const applyChangesActor = fromPromise<number, { actions: DefragAction[] }>(async
   throw new Error("applyChanges: not provided via machine.provide()");
 });
 
-const generateAgentsMdActor = fromPromise<void, { hotTier: string[]; warmTier: string[]; entries: EntryForDefrag[] }>(
-  async () => {
-    throw new Error("generateAgentsMd: not provided via machine.provide()");
-  },
-);
+const generateAgentsMdActor = fromPromise<void, { topOfMind: string[]; entries: EntryForDefrag[] }>(async () => {
+  throw new Error("generateAgentsMd: not provided via machine.provide()");
+});
 
 const commitChangesActor = fromPromise<void, void>(async () => {
   throw new Error("commitChanges: not provided via machine.provide()");
@@ -224,8 +222,7 @@ export const defragMachine = setup({
         id: "generateAgentsMd",
         src: "generateAgentsMd",
         input: ({ context }) => ({
-          hotTier: context.decision?.hotTier ?? [],
-          warmTier: context.decision?.warmTier ?? [],
+          topOfMind: context.decision?.topOfMind ?? [],
           entries: context.entries,
         }),
         onDone: "commitChanges",

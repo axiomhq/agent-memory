@@ -7,7 +7,7 @@ import { createFileMemoryPersistenceAdapter } from "../persist/filesystem.js";
 import { createMemoryService } from "../service.js";
 import { buildDefragPrompt, parseDefragOutput, type EntryForDefrag } from "../prompts/defrag.js";
 import { executeShellLLM } from "../adapters/shell.js";
-import { replaceAgentsMdSection, generateAgentsMdSection, assignTiers } from "../agents-md/generator.js";
+import { replaceAgentsMdSection, generateAgentsMdSection } from "../agents-md/generator.js";
 
 export async function run(_args: string[]) {
   const config = loadConfig();
@@ -47,23 +47,26 @@ export async function run(_args: string[]) {
 
   console.log(`defrag complete:`);
   console.log(`  actions: ${decision.actions.length}`);
-  console.log(`  hot tier: ${decision.hotTier.length}`);
-  console.log(`  warm tier: ${decision.warmTier.length}`);
+  console.log(`  top of mind: ${decision.topOfMind.length}`);
 
-  const tiered = assignTiers(listResult.value, decision.hotTier, decision.warmTier);
+  const topOfMindSet = new Set(decision.topOfMind);
 
   const hotWithBody = await Promise.all(
-    tiered.hot.map(async (meta) => {
-      const result = await adapter.read(meta.id);
-      return result.isOk() ? { meta, body: result.value.body } : null;
-    }),
+    listResult.value
+      .filter((meta) => topOfMindSet.has(meta.id))
+      .map(async (meta) => {
+        const result = await adapter.read(meta.id);
+        return result.isOk() ? { meta, body: result.value.body } : null;
+      }),
   );
 
   const hotEntries = hotWithBody.filter((e): e is NonNullable<typeof e> => e !== null);
-  const warmEntries = tiered.warm.map((meta) => ({
-    meta,
-    path: `${rootDir}/orgs/default/archive/${meta.id}.md`,
-  }));
+  const warmEntries = listResult.value
+    .filter((meta) => !topOfMindSet.has(meta.id))
+    .map((meta) => ({
+      meta,
+      path: `${rootDir}/orgs/default/archive/${meta.id}.md`,
+    }));
 
   const section = generateAgentsMdSection(hotEntries, warmEntries);
 

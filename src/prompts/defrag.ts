@@ -1,8 +1,8 @@
 /**
  * defrag prompt builder — reorganizes memory filesystem.
- * agent decides: what earns hot-tier, what to merge/split/rename/archive.
+ * agent decides: what's top-of-mind, what to merge/split/rename/archive.
  *
- * tiering criteria: content relevance and tags, not usage counters.
+ * tiering is binary: top-of-mind (inlined in system prompt) vs everything else (listed).
  * per notes-and-links ADR, used/last_used/pinned/status are removed.
  */
 
@@ -15,8 +15,7 @@ export interface EntryForDefrag {
 
 export interface DefragDecision {
   actions: DefragAction[];
-  hotTier: string[];
-  warmTier: string[];
+  topOfMind: string[];
 }
 
 export type DefragAction =
@@ -41,13 +40,14 @@ export function buildDefragPrompt(entries: EntryForDefrag[]): string {
 1. **Target 15-25 focused files** — letta pattern
 2. **Max ~40 lines per file** — split if larger
 3. **Detect duplicates/overlaps** — merge related content
-4. **Decide hot/warm/cold tiering** for AGENTS.md generation
+4. **Decide top-of-mind entries** for AGENTS.md generation
 
-## Tiering criteria
+## Tiering
 
-- **Hot tier** (inlined in AGENTS.md): foundational knowledge, actively relevant entries, well-tagged core content
-- **Warm tier** (paths listed): relevant but not top-tier
-- **Cold tier** (omitted): discoverable via grep/list
+Binary model:
+
+- **Top of mind** (inlined in AGENTS.md): foundational, actively relevant, well-connected in the link graph. These will be inlined in the agent's system prompt.
+- **Everything else** (listed by title + id): discoverable via \`memory list\` / \`memory read <id>\`
 
 Tiering is based on content relevance, tags, and topical importance — not usage counters.
 
@@ -59,7 +59,7 @@ ${entriesSection}
 
 1. Review entries for duplicates, overlaps, or overgrown files
 2. Decide what to merge, split, rename, or archive
-3. Assign hot/warm tier membership
+3. Decide which entries are TOP OF MIND — foundational, actively relevant, well-connected in the link graph
 
 Respond with ONLY a JSON object. No markdown fencing:
 
@@ -71,12 +71,11 @@ Respond with ONLY a JSON object. No markdown fencing:
     { "type": "archive", "id": "id__old", "reason": "superseded by id__new" },
     { "type": "update-tags", "id": "id__x", "tags": ["topic__y", "area__z"] }
   ],
-  "hotTier": ["id__abc123", "id__ghi789"],
-  "warmTier": ["id__def456", "id__jkl012"]
+  "topOfMind": ["id__abc123", "id__ghi789"]
 }
 
 If no changes needed, respond with:
-{ "actions": [], "hotTier": [...], "warmTier": [...] }`;
+{ "actions": [], "topOfMind": [...] }`;
 }
 
 export function parseDefragOutput(raw: string): DefragDecision {
@@ -103,12 +102,8 @@ export function parseDefragOutput(raw: string): DefragDecision {
     throw new Error("defrag output missing 'actions' array");
   }
 
-  if (!Array.isArray(obj.hotTier)) {
-    throw new Error("defrag output missing 'hotTier' array");
-  }
-
-  if (!Array.isArray(obj.warmTier)) {
-    throw new Error("defrag output missing 'warmTier' array");
+  if (!Array.isArray(obj.topOfMind)) {
+    throw new Error("defrag output missing 'topOfMind' array");
   }
 
   const actions: DefragAction[] = [];
@@ -186,7 +181,6 @@ export function parseDefragOutput(raw: string): DefragDecision {
 
   return {
     actions,
-    hotTier: obj.hotTier.filter((id): id is string => typeof id === "string"),
-    warmTier: obj.warmTier.filter((id): id is string => typeof id === "string"),
+    topOfMind: obj.topOfMind.filter((id): id is string => typeof id === "string"),
   };
 }

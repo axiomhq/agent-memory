@@ -55,12 +55,11 @@ describe("buildDefragPrompt", () => {
     expect(prompt).not.toContain("x".repeat(600));
   });
 
-  it("includes tiering instructions with hot/warm/cold criteria", () => {
+  it("includes tiering instructions with top-of-mind binary model", () => {
     const prompt = buildDefragPrompt([]);
 
-    expect(prompt).toContain("Hot tier");
-    expect(prompt).toContain("Warm tier");
-    expect(prompt).toContain("Cold tier");
+    expect(prompt).toContain("Top of mind");
+    expect(prompt).toContain("Everything else");
     expect(prompt).toContain("foundational");
     expect(prompt).toContain("content relevance");
   });
@@ -127,22 +126,20 @@ describe("buildDefragPrompt", () => {
 });
 
 describe("parseDefragOutput", () => {
-  it("parses valid JSON object with actions and tiers", () => {
+  it("parses valid JSON object with actions and topOfMind", () => {
     const raw = JSON.stringify({
       actions: [],
-      hotTier: ["id__aaa111"],
-      warmTier: ["id__bbb222"],
+      topOfMind: ["id__aaa111", "id__bbb222"],
     });
 
     const result = parseDefragOutput(raw);
 
     expect(result.actions).toEqual([]);
-    expect(result.hotTier).toEqual(["id__aaa111"]);
-    expect(result.warmTier).toEqual(["id__bbb222"]);
+    expect(result.topOfMind).toEqual(["id__aaa111", "id__bbb222"]);
   });
 
   it("strips markdown code fence with json", () => {
-    const raw = '```json\n{"actions": [], "hotTier": [], "warmTier": []}\n```';
+    const raw = '```json\n{"actions": [], "topOfMind": []}\n```';
 
     const result = parseDefragOutput(raw);
 
@@ -150,7 +147,7 @@ describe("parseDefragOutput", () => {
   });
 
   it("strips code fence without language", () => {
-    const raw = '```\n{"actions": [], "hotTier": [], "warmTier": []}\n```';
+    const raw = '```\n{"actions": [], "topOfMind": []}\n```';
 
     const result = parseDefragOutput(raw);
 
@@ -168,8 +165,7 @@ describe("parseDefragOutput", () => {
           tags: ["topic__x"],
         },
       ],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     const result = parseDefragOutput(raw);
@@ -196,8 +192,7 @@ describe("parseDefragOutput", () => {
           ],
         },
       ],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     const result = parseDefragOutput(raw);
@@ -216,8 +211,7 @@ describe("parseDefragOutput", () => {
   it("parses rename action", () => {
     const raw = JSON.stringify({
       actions: [{ type: "rename", id: "id__old", newTitle: "better title" }],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     const result = parseDefragOutput(raw);
@@ -233,8 +227,7 @@ describe("parseDefragOutput", () => {
   it("parses archive action", () => {
     const raw = JSON.stringify({
       actions: [{ type: "archive", id: "id__old", reason: "superseded" }],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     const result = parseDefragOutput(raw);
@@ -250,8 +243,7 @@ describe("parseDefragOutput", () => {
   it("parses update-tags action", () => {
     const raw = JSON.stringify({
       actions: [{ type: "update-tags", id: "id__x", tags: ["topic__y", "area__z"] }],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     const result = parseDefragOutput(raw);
@@ -277,28 +269,21 @@ describe("parseDefragOutput", () => {
   });
 
   it("throws on missing actions field", () => {
-    expect(() => parseDefragOutput('{"hotTier": [], "warmTier": []}')).toThrow(
+    expect(() => parseDefragOutput('{"topOfMind": []}')).toThrow(
       "defrag output missing 'actions' array",
     );
   });
 
-  it("throws on missing hotTier field", () => {
-    expect(() => parseDefragOutput('{"actions": [], "warmTier": []}')).toThrow(
-      "defrag output missing 'hotTier' array",
-    );
-  });
-
-  it("throws on missing warmTier field", () => {
-    expect(() => parseDefragOutput('{"actions": [], "hotTier": []}')).toThrow(
-      "defrag output missing 'warmTier' array",
+  it("throws on missing topOfMind field", () => {
+    expect(() => parseDefragOutput('{"actions": []}')).toThrow(
+      "defrag output missing 'topOfMind' array",
     );
   });
 
   it("throws on unknown action type", () => {
     const raw = JSON.stringify({
       actions: [{ type: "unknown" }],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     expect(() => parseDefragOutput(raw)).toThrow("unknown action type: unknown");
@@ -307,8 +292,7 @@ describe("parseDefragOutput", () => {
   it("throws on merge without sources", () => {
     const raw = JSON.stringify({
       actions: [{ type: "merge", title: "t", body: "b", tags: [] }],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     expect(() => parseDefragOutput(raw)).toThrow(
@@ -319,8 +303,7 @@ describe("parseDefragOutput", () => {
   it("throws on merge without title", () => {
     const raw = JSON.stringify({
       actions: [{ type: "merge", sources: ["id__a"], body: "b", tags: [] }],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     expect(() => parseDefragOutput(raw)).toThrow(
@@ -331,8 +314,7 @@ describe("parseDefragOutput", () => {
   it("throws on split without source", () => {
     const raw = JSON.stringify({
       actions: [{ type: "split", entries: [] }],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     expect(() => parseDefragOutput(raw)).toThrow(
@@ -343,8 +325,7 @@ describe("parseDefragOutput", () => {
   it("throws on rename without id", () => {
     const raw = JSON.stringify({
       actions: [{ type: "rename", newTitle: "new" }],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     expect(() => parseDefragOutput(raw)).toThrow(
@@ -355,8 +336,7 @@ describe("parseDefragOutput", () => {
   it("throws on archive without reason", () => {
     const raw = JSON.stringify({
       actions: [{ type: "archive", id: "id__x" }],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     expect(() => parseDefragOutput(raw)).toThrow(
@@ -367,8 +347,7 @@ describe("parseDefragOutput", () => {
   it("throws on update-tags without tags", () => {
     const raw = JSON.stringify({
       actions: [{ type: "update-tags", id: "id__x" }],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     expect(() => parseDefragOutput(raw)).toThrow(
@@ -376,28 +355,15 @@ describe("parseDefragOutput", () => {
     );
   });
 
-  it("filters non-string ids from hotTier", () => {
+  it("filters non-string ids from topOfMind", () => {
     const raw = JSON.stringify({
       actions: [],
-      hotTier: ["id__valid", 123, null, "id__also-valid"],
-      warmTier: [],
+      topOfMind: ["id__valid", 123, null, "id__also-valid"],
     });
 
     const result = parseDefragOutput(raw);
 
-    expect(result.hotTier).toEqual(["id__valid", "id__also-valid"]);
-  });
-
-  it("filters non-string ids from warmTier", () => {
-    const raw = JSON.stringify({
-      actions: [],
-      hotTier: [],
-      warmTier: ["id__valid", { foo: "bar" }, "id__also-valid"],
-    });
-
-    const result = parseDefragOutput(raw);
-
-    expect(result.warmTier).toEqual(["id__valid", "id__also-valid"]);
+    expect(result.topOfMind).toEqual(["id__valid", "id__also-valid"]);
   });
 
   it("filters non-string tags from merge action", () => {
@@ -411,8 +377,7 @@ describe("parseDefragOutput", () => {
           tags: ["valid", 123, null, "also-valid"],
         },
       ],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     const result = parseDefragOutput(raw);
@@ -429,8 +394,7 @@ describe("parseDefragOutput", () => {
   it("filters non-string tags from update-tags action", () => {
     const raw = JSON.stringify({
       actions: [{ type: "update-tags", id: "id__x", tags: ["a", 1, "b", null] }],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     const result = parseDefragOutput(raw);
@@ -445,8 +409,7 @@ describe("parseDefragOutput", () => {
   it("handles merge with missing tags field", () => {
     const raw = JSON.stringify({
       actions: [{ type: "merge", sources: ["id__a"], title: "t", body: "b" }],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     const result = parseDefragOutput(raw);
@@ -471,8 +434,7 @@ describe("parseDefragOutput", () => {
           tags: [],
         },
       ],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     const result = parseDefragOutput(raw);
@@ -489,8 +451,7 @@ describe("parseDefragOutput", () => {
   it("throws on non-object action", () => {
     const raw = JSON.stringify({
       actions: ["not an object"],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     expect(() => parseDefragOutput(raw)).toThrow("action 0 must be an object");
@@ -499,8 +460,7 @@ describe("parseDefragOutput", () => {
   it("throws on action missing type", () => {
     const raw = JSON.stringify({
       actions: [{ id: "id__x" }],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     expect(() => parseDefragOutput(raw)).toThrow("action 0 missing type");

@@ -511,8 +511,7 @@ Some existing content without memory section.`;
 
       const mockAgentOutput = JSON.stringify({
         actions: [{ type: "rename", id: id1, newTitle: "Auth Best Practices" }],
-        hotTier: [id1],
-        warmTier: [],
+        topOfMind: [id1],
       });
 
       const appliedRenames: Array<{ id: string; newTitle: string }> = [];
@@ -548,7 +547,7 @@ Some existing content without memory section.`;
 
           generateAgentsMd: fromPromise<
             void,
-            { hotTier: string[]; warmTier: string[]; entries: EntryForDefrag[] }
+            { topOfMind: string[]; entries: EntryForDefrag[] }
           >(async () => {}),
 
           commitChanges: fromPromise<void, void>(async () => {}),
@@ -571,20 +570,20 @@ Some existing content without memory section.`;
       }
     });
 
-    it("propagates hotTier and warmTier to generateAgentsMd", async () => {
-      const id1 = await generateId("hot entry", Date.now());
-      const id2 = await generateId("warm entry", Date.now() + 1);
+    it("propagates topOfMind to generateAgentsMd", async () => {
+      const id1 = await generateId("important entry", Date.now());
+      const id2 = await generateId("other entry", Date.now() + 1);
 
       const entries: EntryForDefrag[] = [
         {
           id: id1,
-          title: "hot entry",
-          body: "important",
+          title: "important entry",
+          body: "foundational",
           tags: [],
         },
         {
           id: id2,
-          title: "warm entry",
+          title: "other entry",
           body: "useful",
           tags: [],
         },
@@ -592,11 +591,10 @@ Some existing content without memory section.`;
 
       const mockAgentOutput = JSON.stringify({
         actions: [],
-        hotTier: [id1],
-        warmTier: [id2],
+        topOfMind: [id1],
       });
 
-      let capturedInput: { hotTier: string[]; warmTier: string[] } | null = null;
+      let capturedInput: { topOfMind: string[] } | null = null;
 
       const providers = {
         actors: {
@@ -610,9 +608,9 @@ Some existing content without memory section.`;
 
           generateAgentsMd: fromPromise<
             void,
-            { hotTier: string[]; warmTier: string[]; entries: EntryForDefrag[] }
+            { topOfMind: string[]; entries: EntryForDefrag[] }
           >(async ({ input }) => {
-            capturedInput = { hotTier: input.hotTier, warmTier: input.warmTier };
+            capturedInput = { topOfMind: input.topOfMind };
           }),
 
           commitChanges: fromPromise<void, void>(async () => {}),
@@ -625,8 +623,7 @@ Some existing content without memory section.`;
       const result = await waitForFinal(actor);
       expect(result.value).toBe("completed");
       expect(capturedInput).not.toBeNull();
-      expect(capturedInput!.hotTier).toEqual([id1]);
-      expect(capturedInput!.warmTier).toEqual([id2]);
+      expect(capturedInput!.topOfMind).toEqual([id1]);
     });
   });
 
