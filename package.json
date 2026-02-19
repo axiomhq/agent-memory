@@ -13,7 +13,8 @@
     "./machines/consolidate": "./src/machines/consolidate.ts",
     "./adapters": "./src/adapters/index.ts",
     "./adapters/amp": "./src/adapters/amp.ts",
-    "./prompts/consolidate": "./src/prompts/consolidate.ts"
+    "./prompts/consolidate": "./src/prompts/consolidate.ts",
+    "./tags": "./src/tags.ts"
   },
   "bin": {
     "memory": "./src/cli/index.ts"

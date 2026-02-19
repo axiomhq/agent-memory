@@ -15,6 +15,7 @@ import { join, basename } from "path";
 import { ResultAsync, errAsync } from "neverthrow";
 import { isValidId } from "../id.js";
 import { serializeMemoryMarkdown, parseMemoryMarkdown } from "../format.js";
+import { extractTags } from "../tags.js";
 import type { MemoryEntry, MemoryEntryMeta } from "../schema.js";
 import type { MemoryPersistenceAdapter, MemoryPersistenceError, MemoryListFilter } from "./index.js";
 
@@ -40,28 +41,6 @@ interface FileAdapterOptions {
   rootDir: string;
 }
 
-/**
- * extract tags from body text. inline #tag syntax.
- * simplified extraction — full extractTags in US-002.
- */
-function extractTagsSimple(body: string): string[] {
-  const tags: string[] = [];
-  const lines = body.split("\n");
-
-  for (const line of lines) {
-    // skip headings
-    if (/^#+\s/.test(line)) continue;
-
-    const matches = line.matchAll(/(?<!\w)#([a-zA-Z0-9_]+(?:__[a-zA-Z0-9_]+)?)\b/g);
-    for (const match of matches) {
-      if (match[1] && !tags.includes(match[1])) {
-        tags.push(match[1]);
-      }
-    }
-  }
-
-  return tags;
-}
 
 function readEntriesFromDir(dir: string): Array<{ meta: MemoryEntryMeta; filePath: string }> {
   if (!existsSync(dir)) return [];
@@ -80,7 +59,7 @@ function readEntriesFromDir(dir: string): Array<{ meta: MemoryEntryMeta; filePat
       const result = parseMemoryMarkdown(text, filePath, id);
       if (result.isErr()) continue;
 
-      const tags = extractTagsSimple(result.value.body);
+      const tags = extractTags(result.value.body);
       const now = Date.now();
 
       results.push({
@@ -228,7 +207,7 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
             throw new Error(result.error.message);
           }
 
-          const tags = extractTagsSimple(result.value.body);
+          const tags = extractTags(result.value.body);
           const now = Date.now();
 
           return {
