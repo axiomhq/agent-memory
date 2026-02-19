@@ -1,0 +1,190 @@
+{
+  "project": "agent-memory",
+  "branchName": "ralph/notes-and-links-schema",
+  "description": "Remodel agent-memory from metadata-containers to notes-and-links. Phase 1: schema, format, link parsing, tag extraction, git timestamps, safe rename, migration.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Remove stored metadata — pure markdown entries",
+      "description": "As a developer, I want memory entries to be plain markdown files with no metadata header so the format is tool-agnostic and human-readable.",
+      "acceptanceCriteria": [
+        "MemoryEntryMetaSchema removed or replaced with a derived type — no arktype schema for stored metadata",
+        "Runtime MemoryEntryMeta type still exists with fields: id, title, tags, createdAt, updatedAt, org (optional), sources (optional)",
+        "Fields removed entirely: used, last_used, pinned, status",
+        "serializeMemoryMarkdown() produces pure markdown: # title, #tag1 #tag2, body",
+        "parseMemoryMarkdown() extracts title from # heading, tags from #tag, receives id from caller",
+        "service.read() is a pure read — no mutation, no write-back, no side effects",
+        "CaptureInput simplified — takes title, body, tags (optional)",
+        "service.capture() writes a plain markdown file: heading + inline tags + body",
+        "schema.test.ts updated for new type",
+        "service.test.ts updated — verify read() does not write",
+        "format.test.ts updated for new serialization/parsing",
+        "bun run typecheck passes",
+        "bun run test passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "This is the foundation — everything else depends on the new schema. The MemoryEntry type becomes { id: string; title: string; tags: string[]; body: string; createdAt: number; updatedAt: number; org?: string; sources?: ... }. id comes from filename, title from # heading, tags from #tag in body."
+    },
+    {
+      "id": "US-002",
+      "title": "Tag extraction from #tag syntax",
+      "description": "As a developer, I want to extract tags from #tag syntax in note bodies so tags are inline and visible, not hidden in metadata.",
+      "acceptanceCriteria": [
+        "extractTags(body: string) function returns string[] of tag names without the # prefix",
+        "Handles single-word tags: #people, #work",
+        "Handles namespaced tags: #area__work, #topic__design",
+        "Ignores # in headings (# Title, ## Subtitle — line starts with # followed by space)",
+        "Ignores # inside fenced code blocks (``` blocks)",
+        "Ignores # in URLs and hex colors (#ff0000)",
+        "New file src/tags.ts or colocated in format.ts",
+        "Tests: tags adjacent to text, tags on own line, tags in code blocks, tags after headings",
+        "bun run typecheck passes",
+        "bun run test passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "A tag is # followed by word characters (a-z0-9_), NOT preceded by a word character, NOT at line start followed by space (heading). Keep extraction rules precise to avoid false positives."
+    },
+    {
+      "id": "US-003",
+      "title": "Link syntax — parsing and extraction",
+      "description": "As a developer, I want utilities to parse [[id__XXXXXX|display text]] links from note bodies so the system can build a link graph.",
+      "acceptanceCriteria": [
+        "extractLinks(body: string) returns Array<{ id: string; displayText: string; position: { start: number; end: number } }>",
+        "Handles [[id__XXXXXX|display text]] — full form with alias",
+        "Handles [[id__XXXXXX]] — short form (displayText defaults to the ID)",
+        "Ignores malformed links (missing closing brackets, invalid ID format)",
+        "Ignores links inside fenced code blocks",
+        "replaceLink(body: string, oldId: string, newId: string) updates all links targeting oldId, preserving display text",
+        "New file src/links.ts",
+        "Tests: multiple links per line, links in code blocks, special chars in display text, nested brackets",
+        "bun run typecheck passes",
+        "bun run test passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "ID validation: must match id__ followed by 6 base58 chars. Use the existing ID_PATTERN from id.ts."
+    },
+    {
+      "id": "US-004",
+      "title": "Git-based timestamp resolution",
+      "description": "As a developer, I want to resolve createdAt and updatedAt from git history so timestamps are durable without storing them in the file.",
+      "acceptanceCriteria": [
+        "getFileTimestamps(rootDir: string, filePath: string) returns { createdAt: number; updatedAt: number }",
+        "createdAt from git log --follow --diff-filter=A --format=%at -- <file>",
+        "updatedAt from git log -1 --format=%at -- <file>",
+        "Returns fallback timestamps (Date.now()) for uncommitted/untracked files",
+        "New file src/timestamps.ts",
+        "Test with a real temp git repo: commit a file, verify timestamps match",
+        "Test with uncommitted file: verify fallback returned",
+        "bun run typecheck passes",
+        "bun run test passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Shells out to git via Bun shell ($). Tests must init a temp git repo with at least one commit. Consider caching results during a single list() call to avoid N git invocations."
+    },
+    {
+      "id": "US-005",
+      "title": "Update persistence adapter for pure markdown",
+      "description": "As a developer, I want the filesystem persistence adapter to read/write pure markdown entries and derive metadata from filename + body content.",
+      "acceptanceCriteria": [
+        "buildFilename() produces 'slug id__XXXXXX.md' — no tags in filename, no _top-of-mind prefix",
+        "write() serializes pure markdown via serializeMemoryMarkdown()",
+        "read() parses entry: extracts id from filename, title from # heading, tags from #tag via extractTags(), links via extractLinks()",
+        "list() returns derived MemoryEntryMeta array (id from filename, title from heading, tags from body)",
+        "isTopOfMindFilename() and setTopOfMind() removed if present in this package",
+        "readEntriesFromDir() works with new filename format",
+        "integration.test.ts updated for new format",
+        "bun run typecheck passes",
+        "bun run test passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "Depends on US-001 (schema), US-002 (tags), US-003 (links). The adapter interface shape (list/read/write/delete) stays the same — only the implementation changes."
+    },
+    {
+      "id": "US-006",
+      "title": "Safe rename operation",
+      "description": "As a developer, I want service.rename(id, newTitle) to update heading, filename, and all inbound link display text so links stay consistent after renames.",
+      "acceptanceCriteria": [
+        "MemoryService gains rename(id: string, newTitle: string) method",
+        "Updates the # heading in the entry's markdown body",
+        "Updates the filename (new slug from new title, id preserved)",
+        "Scans all other entries for [[id|old display text]] and updates display text to newTitle",
+        "Only updates display text where it matches the OLD title (preserves custom display text)",
+        "Returns result with count of updated inbound links",
+        "Test: create A linking to B, rename B, verify A's link display text updated",
+        "Test: create A linking to B with custom display text, rename B, verify custom text preserved",
+        "bun run typecheck passes",
+        "bun run test passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "Depends on US-003 (links) and US-005 (adapter). Uses replaceLink() internally. O(n) scan over all entries — fine at current scale."
+    },
+    {
+      "id": "US-007",
+      "title": "Link graph queries",
+      "description": "As a developer, I want to query the link graph (inbound, outbound, orphans, broken links) so defrag can use link topology as a signal.",
+      "acceptanceCriteria": [
+        "MemoryService gains links(id) returning { inbound: Array<{ id, title }>, outbound: Array<{ id, displayText }> }",
+        "inbound: entries whose body contains [[id|...]] pointing to this entry",
+        "outbound: all [[target_id|...]] links in this entry's body",
+        "MemoryService gains orphans() returning entry IDs with zero inbound links",
+        "MemoryService gains brokenLinks() returning Array<{ sourceId, targetId }> for links to nonexistent entries",
+        "Tests: linked entries return correct inbound/outbound, orphan detection works, broken link detection works",
+        "bun run typecheck passes",
+        "bun run test passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Depends on US-003 (links) and US-005 (adapter). These methods read all entries and build the graph in memory. Acceptable at current scale."
+    },
+    {
+      "id": "US-008",
+      "title": "Update defrag prompt — strip dead fields",
+      "description": "As a developer, I want the defrag prompt to stop referencing used/last_used/pinned since those fields no longer exist.",
+      "acceptanceCriteria": [
+        "EntryForDefrag no longer includes used, last_used, or pinned fields",
+        "buildDefragPrompt() no longer renders usage stats per entry",
+        "Prompt text removes 'used counter and last_used timestamp inform but don't dictate tiering'",
+        "Prompt text removes 'pinned: true is a strong signal for hot tier'",
+        "Tiering criteria updated — hot tier signal is content relevance and tags",
+        "DefragDecision type unchanged (hotTier, warmTier, actions still present)",
+        "prompts-defrag.test.ts updated",
+        "bun run typecheck passes",
+        "bun run test passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Minimal change — just strip dead references. Full graph-aware defrag is phase 2."
+    },
+    {
+      "id": "US-009",
+      "title": "Migration script — old format to pure markdown",
+      "description": "As a developer, I want a migration script that converts all existing entries from the old format to pure markdown in one pass.",
+      "acceptanceCriteria": [
+        "Script at src/cli/migrate-to-v2.ts",
+        "Reads all .md files in memory root (all orgs, archive dirs)",
+        "Parses old format (<!-- agent-memory:meta { ... } -->)",
+        "Writes new format: # title, #tag1 #tag2, body — strips JSON header",
+        "Tags converted from array ['topic__x', 'area__y'] to inline #topic__x #area__y",
+        "Strips used, last_used, pinned, status, createdAt, updatedAt from stored content",
+        "Removes _top-of-mind prefix from filename if present, keeps id__XXXXXX",
+        "Preserves body content including any existing [[links]]",
+        "--dry-run flag shows changes without writing",
+        "--root-dir PATH flag to specify memory root",
+        "Idempotent — running twice produces same result",
+        "Prints summary: entries migrated, skipped, errors",
+        "Test: create old-format entries in temp dir, run migration, verify new format output",
+        "bun run typecheck passes",
+        "bun run test passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "Depends on US-001 (new format). Must handle both old header formats: '<!-- agent-memory:meta' and '<!-- axi-agent:memory-meta' (legacy). Run AFTER deploying new code so the new adapter can read the migrated files."
+    }
+  ]
+}
