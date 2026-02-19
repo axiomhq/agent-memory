@@ -16,6 +16,7 @@ export interface DefragError {
 }
 
 export interface DefragContext {
+  org: string;
   entries: EntryForDefrag[];
   agentOutput: string;
   decision: DefragDecision | null;
@@ -24,7 +25,9 @@ export interface DefragContext {
   error?: DefragError;
 }
 
-export interface DefragInput {}
+export interface DefragInput {
+  org?: string;
+}
 
 const scanEntriesActor = fromPromise<EntryForDefrag[], void>(async () => {
   throw new Error("scanEntries: not provided via machine.provide()");
@@ -38,7 +41,7 @@ const applyChangesActor = fromPromise<number, { actions: DefragAction[] }>(async
   throw new Error("applyChanges: not provided via machine.provide()");
 });
 
-const generateAgentsMdActor = fromPromise<void, { topOfMind: string[]; entries: EntryForDefrag[] }>(async () => {
+const generateAgentsMdActor = fromPromise<void, { org: string; topOfMind: string[]; entries: EntryForDefrag[] }>(async () => {
   throw new Error("generateAgentsMd: not provided via machine.provide()");
 });
 
@@ -90,7 +93,8 @@ export const defragMachine = setup({
 }).createMachine({
   id: "defrag",
   initial: "scanEntries",
-  context: () => ({
+  context: ({ input }) => ({
+    org: input.org ?? "default",
     entries: [],
     agentOutput: "",
     decision: null,
@@ -222,6 +226,7 @@ export const defragMachine = setup({
         id: "generateAgentsMd",
         src: "generateAgentsMd",
         input: ({ context }) => ({
+          org: context.org,
           topOfMind: context.decision?.topOfMind ?? [],
           entries: context.entries,
         }),

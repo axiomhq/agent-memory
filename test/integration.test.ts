@@ -543,7 +543,7 @@ Some existing content without memory section.`;
 
           generateAgentsMd: fromPromise<
             void,
-            { topOfMind: string[]; entries: EntryForDefrag[] }
+            { org: string; topOfMind: string[]; entries: EntryForDefrag[] }
           >(async () => {}),
 
           commitChanges: fromPromise<void, void>(async () => {}),
@@ -604,7 +604,7 @@ Some existing content without memory section.`;
 
           generateAgentsMd: fromPromise<
             void,
-            { topOfMind: string[]; entries: EntryForDefrag[] }
+            { org: string; topOfMind: string[]; entries: EntryForDefrag[] }
           >(async ({ input }) => {
             capturedInput = { topOfMind: input.topOfMind };
           }),

@@ -31,7 +31,7 @@ function createTestProviders(overrides: {
   const entries = overrides.entries ?? [];
   const agentOutput = overrides.agentOutput ?? JSON.stringify({ actions: [], topOfMind: [] });
 
-  let capturedGenerateInput: { topOfMind: string[]; entries: EntryForDefrag[] } | null = null;
+  let capturedGenerateInput: { org: string; topOfMind: string[]; entries: EntryForDefrag[] } | null = null;
 
   return {
     providers: {
@@ -53,7 +53,7 @@ function createTestProviders(overrides: {
 
         generateAgentsMd: fromPromise<
           void,
-          { topOfMind: string[]; entries: EntryForDefrag[] }
+          { org: string; topOfMind: string[]; entries: EntryForDefrag[] }
         >(async ({ input }) => {
           capturedGenerateInput = input;
           if (overrides.generateError) throw new Error("generateAgentsMd failed");

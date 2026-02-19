@@ -1,7 +1,10 @@
 /**
- * memory defrag — run defrag machine, regenerate AGENTS.md.
+ * memory defrag — run defrag machine, regenerate output-agents.md per org.
  */
 
+import { join } from "path";
+import { parseArgs } from "util";
+import { mkdirSync, existsSync } from "fs";
 import { loadConfig, expandPath } from "../config.js";
 import { createFileMemoryPersistenceAdapter } from "../persist/filesystem.js";
 import { createMemoryService } from "../service.js";
@@ -10,7 +13,16 @@ import { executeShellLLM } from "../adapters/shell.js";
 import { replaceAgentsMdSection, generateAgentsMdSection } from "../agents-md/generator.js";
 import type { EntryWithBody } from "../agents-md/generator.js";
 
-export async function run(_args: string[]) {
+export async function run(args: string[]) {
+  const { values } = parseArgs({
+    args,
+    options: {
+      org: { type: "string", short: "o" },
+    },
+    strict: true,
+  });
+
+  const org = values.org ?? "default";
   const config = loadConfig();
   const rootDir = expandPath(config.storage.root);
 
@@ -59,7 +71,7 @@ export async function run(_args: string[]) {
         id: e.id,
         title: e.title,
         tags: e.tags,
-        org: "default",
+        org,
       },
       body: e.body,
     }));
@@ -68,9 +80,11 @@ export async function run(_args: string[]) {
 
   const section = generateAgentsMdSection(topOfMindEntries, allEntries);
 
-  for (const target of config.agentsMd.targets) {
-    const targetPath = expandPath(target);
-    replaceAgentsMdSection(targetPath, section);
-    console.log(`  updated: ${targetPath}`);
+  const targetDir = join(rootDir, "orgs", org);
+  if (!existsSync(targetDir)) {
+    mkdirSync(targetDir, { recursive: true });
   }
+  const targetPath = join(targetDir, "output-agents.md");
+  replaceAgentsMdSection(targetPath, section);
+  console.log(`  updated: ${targetPath}`);
 }
