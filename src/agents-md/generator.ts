@@ -1,11 +1,11 @@
 /**
- * AGENTS.md generator — produces hot/warm/cold tiered memory section.
+ * AGENTS.md generator — produces top-of-mind + archive list section.
  * uses sentinel comments for idempotent replacement.
+ * uses [[id|text]] wiki-link format for entry references.
  */
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
-import { join } from "path";
-import type { MemoryEntry, MemoryEntryMeta } from "../schema.js";
+import type { MemoryEntryMeta } from "../schema.js";
 
 const SECTION_START = "<!-- agent-memory:start -->";
 const SECTION_END = "<!-- agent-memory:end -->";
@@ -20,36 +20,32 @@ export interface EntryWithBody {
 }
 
 export function generateAgentsMdSection(
-  hotEntries: EntryWithBody[],
-  warmEntries: Array<{ meta: MemoryEntryMeta; path: string }>,
+  topOfMindEntries: EntryWithBody[],
+  allEntries: MemoryEntryMeta[],
 ): string {
   const lines: string[] = [];
+  const topOfMindIds = new Set(topOfMindEntries.map((e) => e.meta.id));
 
   lines.push("## memory");
   lines.push("");
-  lines.push("hot-tier knowledge, always in context.");
-  lines.push("");
 
-  if (hotEntries.length > 0) {
-    for (const entry of hotEntries) {
-      lines.push(`### ${entry.meta.title}`);
+  if (topOfMindEntries.length > 0) {
+    for (const entry of topOfMindEntries) {
+      lines.push(`## ${entry.meta.title} - ${entry.meta.id}`);
       lines.push("");
       lines.push(entry.body.trim());
       lines.push("");
     }
   } else {
-    lines.push("_no hot-tier entries yet._");
+    lines.push("_no top-of-mind entries yet._");
     lines.push("");
   }
 
-  if (warmEntries.length > 0) {
-    lines.push("---");
-    lines.push("");
-    lines.push("### warm-tier");
-    lines.push("");
-    for (const entry of warmEntries) {
-      const tags = entry.meta.tags?.length ? ` [${entry.meta.tags.join(", ")}]` : "";
-      lines.push(`- \`${entry.meta.id}\`: ${entry.meta.title}${tags}`);
+  const otherEntries = allEntries.filter((e) => !topOfMindIds.has(e.id));
+
+  if (otherEntries.length > 0) {
+    for (const entry of otherEntries) {
+      lines.push(`- [[${entry.id}|${entry.title}]]`);
     }
     lines.push("");
   }
@@ -85,34 +81,4 @@ export function replaceAgentsMdSection(targetPath: string, newSection: string): 
   const after = existing.slice(endIdx + SECTION_END.length);
   const updated = before + wrapped + after;
   writeFileSync(targetPath, updated, "utf-8");
-}
-
-export interface TierAssignment {
-  hotIds: string[];
-  warmIds: string[];
-}
-
-export function assignTiers(
-  entries: MemoryEntryMeta[],
-  hotIds: string[],
-  warmIds: string[],
-): { hot: MemoryEntryMeta[]; warm: MemoryEntryMeta[]; cold: MemoryEntryMeta[] } {
-  const hotSet = new Set(hotIds);
-  const warmSet = new Set(warmIds);
-
-  const hot: MemoryEntryMeta[] = [];
-  const warm: MemoryEntryMeta[] = [];
-  const cold: MemoryEntryMeta[] = [];
-
-  for (const entry of entries) {
-    if (hotSet.has(entry.id)) {
-      hot.push(entry);
-    } else if (warmSet.has(entry.id)) {
-      warm.push(entry);
-    } else {
-      cold.push(entry);
-    }
-  }
-
-  return { hot, warm, cold };
 }

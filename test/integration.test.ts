@@ -365,8 +365,8 @@ describe("integration tests", () => {
   });
 
   describe("AGENTS.md generation", () => {
-    it("generates section with hot and warm tiers", () => {
-      const hotEntries = [
+    it("generates section with top-of-mind and linked entries", () => {
+      const topOfMindEntries = [
         {
           meta: {
             id: "id__abc123",
@@ -374,31 +374,32 @@ describe("integration tests", () => {
             tags: ["topic__core"],
             org: "default",
           },
-          body: "This is a hot-tier entry with important content.\n\nMultiple paragraphs here.",
+          body: "This is a top-of-mind entry with important content.\n\nMultiple paragraphs here.",
         },
       ];
 
-      const warmEntries = [
+      const allEntries = [
         {
-          meta: {
-            id: "id__def456",
-            title: "Warm Tip",
-            tags: ["topic__tips"],
-            org: "default",
-          },
-          path: "/path/to/warm.md",
+          id: "id__abc123",
+          title: "Hot Pattern",
+          tags: ["topic__core"],
+          org: "default",
+        },
+        {
+          id: "id__def456",
+          title: "Warm Tip",
+          tags: ["topic__tips"],
+          org: "default",
         },
       ];
 
-      const section = generateAgentsMdSection(hotEntries, warmEntries);
+      const section = generateAgentsMdSection(topOfMindEntries, allEntries);
 
       expect(section).toContain("## memory");
-      expect(section).toContain("hot-tier knowledge");
-      expect(section).toContain("### Hot Pattern");
-      expect(section).toContain("This is a hot-tier entry");
-      expect(section).toContain("### warm-tier");
-      expect(section).toContain("`id__def456`: Warm Tip");
-      expect(section).toContain("[topic__tips]");
+      expect(section).toContain("## Hot Pattern - id__abc123");
+      expect(section).toContain("This is a top-of-mind entry");
+      expect(section).toContain("- [[id__def456|Warm Tip]]");
+      expect(section).not.toContain("[[id__abc123|Hot Pattern]]");
     });
 
     it("creates file with sentinel comments", () => {
@@ -474,13 +475,8 @@ Some existing content without memory section.`;
       expect(listResult.isOk()).toBe(true);
       if (!listResult.isOk()) return;
 
-      // all entries as warm (hot tier determined by defrag agent)
-      const warmEntries = listResult.value.map((meta) => ({
-        meta,
-        path: `${rootDir}/orgs/default/archive/${meta.id}.md`,
-      }));
-
-      const section = generateAgentsMdSection([], warmEntries);
+      // no top-of-mind — all entries listed as [[id|title]] links
+      const section = generateAgentsMdSection([], listResult.value);
       expect(section).toContain("Important Pattern");
       expect(section).toContain("Secondary Tip");
     });
@@ -764,10 +760,10 @@ Some existing content without memory section.`;
       const readResult = await adapter.read(writtenIds[0]!);
       expect(readResult.isOk()).toBe(true);
       if (readResult.isOk()) {
-        const hotEntries = [{ meta: readResult.value.meta, body: readResult.value.body }];
-        const warmEntries: Array<{ meta: typeof readResult.value.meta; path: string }> = [];
+        const topOfMindEntries = [{ meta: readResult.value.meta, body: readResult.value.body }];
+        const allEntries = [readResult.value.meta];
 
-        const section = generateAgentsMdSection(hotEntries, warmEntries);
+        const section = generateAgentsMdSection(topOfMindEntries, allEntries);
         expect(section).toContain("Project Convention");
         expect(section).toContain("kebab-case");
       }

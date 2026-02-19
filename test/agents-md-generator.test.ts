@@ -6,7 +6,6 @@ import {
   generateAgentsMdSection,
   wrapInSection,
   replaceAgentsMdSection,
-  assignTiers,
 } from "../src/agents-md/generator.js";
 import type { MemoryEntryMeta } from "../src/schema.js";
 
@@ -33,60 +32,80 @@ describe("agents-md generator", () => {
   });
 
   describe("generateAgentsMdSection", () => {
-    test("shows 'no hot-tier entries yet' with empty entries", () => {
+    test("shows 'no top-of-mind entries yet' with empty top-of-mind", () => {
       const result = generateAgentsMdSection([], []);
 
       expect(result).toContain("## memory");
-      expect(result).toContain("_no hot-tier entries yet._");
+      expect(result).toContain("_no top-of-mind entries yet._");
       expect(result).toContain("browse all: `memory list`");
     });
 
-    test("includes title and body with hot entries", () => {
-      const hotEntries = [
+    test("top-of-mind entries rendered as ## title - id with body", () => {
+      const topOfMind = [
         {
           meta: createMeta({ id: "id__hot1", title: "Important Pattern" }),
           body: "Always use Result types for error handling.",
         },
       ];
 
-      const result = generateAgentsMdSection(hotEntries, []);
+      const result = generateAgentsMdSection(topOfMind, [
+        createMeta({ id: "id__hot1", title: "Important Pattern" }),
+      ]);
 
-      expect(result).toContain("### Important Pattern");
+      expect(result).toContain("## Important Pattern - id__hot1");
       expect(result).toContain("Always use Result types for error handling.");
-      expect(result).not.toContain("_no hot-tier entries yet._");
+      expect(result).not.toContain("_no top-of-mind entries yet._");
     });
 
-    test("shows list with ids and titles for warm entries", () => {
-      const warmEntries = [
-        { meta: createMeta({ id: "id__warm1", title: "Pattern A" }), path: "/path/a.md" },
-        { meta: createMeta({ id: "id__warm2", title: "Pattern B", tags: ["topic__x"] }), path: "/path/b.md" },
+    test("other entries rendered as [[id|title]] links", () => {
+      const allEntries = [
+        createMeta({ id: "id__other1", title: "Pattern A" }),
+        createMeta({ id: "id__other2", title: "Pattern B" }),
       ];
 
-      const result = generateAgentsMdSection([], warmEntries);
+      const result = generateAgentsMdSection([], allEntries);
 
-      expect(result).toContain("### warm-tier");
-      expect(result).toContain("`id__warm1`: Pattern A");
-      expect(result).toContain("`id__warm2`: Pattern B");
-      expect(result).toContain("[topic__x]");
+      expect(result).toContain("- [[id__other1|Pattern A]]");
+      expect(result).toContain("- [[id__other2|Pattern B]]");
     });
 
-    test("includes both hot and warm entries", () => {
-      const hotEntries = [
+    test("top-of-mind entries NOT duplicated in the list", () => {
+      const topOfMind = [
         {
           meta: createMeta({ id: "id__hot1", title: "Hot Topic" }),
           body: "Hot content here.",
         },
       ];
-      const warmEntries = [
-        { meta: createMeta({ id: "id__warm1", title: "Warm Topic" }), path: "/path/w.md" },
+      const allEntries = [
+        createMeta({ id: "id__hot1", title: "Hot Topic" }),
+        createMeta({ id: "id__other1", title: "Other Topic" }),
       ];
 
-      const result = generateAgentsMdSection(hotEntries, warmEntries);
+      const result = generateAgentsMdSection(topOfMind, allEntries);
 
-      expect(result).toContain("### Hot Topic");
+      expect(result).toContain("## Hot Topic - id__hot1");
       expect(result).toContain("Hot content here.");
-      expect(result).toContain("### warm-tier");
-      expect(result).toContain("`id__warm1`: Warm Topic");
+      expect(result).toContain("- [[id__other1|Other Topic]]");
+      expect(result).not.toContain("[[id__hot1|Hot Topic]]");
+    });
+
+    test("includes both top-of-mind and other entries", () => {
+      const topOfMind = [
+        {
+          meta: createMeta({ id: "id__hot1", title: "Hot Topic" }),
+          body: "Hot content here.",
+        },
+      ];
+      const allEntries = [
+        createMeta({ id: "id__hot1", title: "Hot Topic" }),
+        createMeta({ id: "id__warm1", title: "Warm Topic" }),
+      ];
+
+      const result = generateAgentsMdSection(topOfMind, allEntries);
+
+      expect(result).toContain("## Hot Topic - id__hot1");
+      expect(result).toContain("Hot content here.");
+      expect(result).toContain("- [[id__warm1|Warm Topic]]");
     });
   });
 
@@ -184,71 +203,6 @@ Footer text.
       expect(content).toContain("new section");
       expect(content).toContain("## Footer");
       expect(content).toContain("Footer text.");
-    });
-  });
-
-  describe("assignTiers", () => {
-    test("correctly partitions entries into hot/warm/cold", () => {
-      const entries = [
-        createMeta({ id: "id__hot1", title: "Hot Entry" }),
-        createMeta({ id: "id__warm1", title: "Warm Entry" }),
-        createMeta({ id: "id__cold1", title: "Cold Entry" }),
-      ];
-
-      const result = assignTiers(entries, ["id__hot1"], ["id__warm1"]);
-
-      expect(result.hot).toHaveLength(1);
-      expect(result.hot[0]!.id).toBe("id__hot1");
-
-      expect(result.warm).toHaveLength(1);
-      expect(result.warm[0]!.id).toBe("id__warm1");
-
-      expect(result.cold).toHaveLength(1);
-      expect(result.cold[0]!.id).toBe("id__cold1");
-    });
-
-    test("handles empty entries", () => {
-      const result = assignTiers([], [], []);
-
-      expect(result.hot).toHaveLength(0);
-      expect(result.warm).toHaveLength(0);
-      expect(result.cold).toHaveLength(0);
-    });
-
-    test("handles all entries in one tier", () => {
-      const entries = [
-        createMeta({ id: "id__a" }),
-        createMeta({ id: "id__b" }),
-        createMeta({ id: "id__c" }),
-      ];
-
-      const result = assignTiers(entries, ["id__a", "id__b", "id__c"], []);
-
-      expect(result.hot).toHaveLength(3);
-      expect(result.warm).toHaveLength(0);
-      expect(result.cold).toHaveLength(0);
-    });
-
-    test("entry not in hot or warm goes to cold", () => {
-      const entries = [
-        createMeta({ id: "id__a" }),
-        createMeta({ id: "id__b" }),
-      ];
-
-      const result = assignTiers(entries, ["id__a"], []);
-
-      expect(result.hot).toHaveLength(1);
-      expect(result.cold).toHaveLength(1);
-      expect(result.cold[0]!.id).toBe("id__b");
-    });
-
-    test("hot takes precedence over warm", () => {
-      const entries = [createMeta({ id: "id__overlap" })];
-      const result = assignTiers(entries, ["id__overlap"], ["id__overlap"]);
-
-      expect(result.hot).toHaveLength(1);
-      expect(result.warm).toHaveLength(0);
-      expect(result.cold).toHaveLength(0);
     });
   });
 });

@@ -29,15 +29,8 @@ export async function run(args: string[]) {
 
   const entries = listResult.value;
 
-  // without usage tracking, all entries are warm by default.
-  // hot tier determined by defrag agent, not heuristics.
-  const hotEntries: Array<{ meta: (typeof entries)[number]; body: string }> = [];
-  const warmEntries = entries.map((meta) => ({
-    meta,
-    path: `${rootDir}/orgs/default/archive/${meta.id}.md`,
-  }));
-
-  const section = generateAgentsMdSection(hotEntries, warmEntries);
+  // without defrag agent, no top-of-mind entries — all listed as links
+  const section = generateAgentsMdSection([], entries);
 
   const targets = values.target ? [values.target] : config.agentsMd.targets;
 
