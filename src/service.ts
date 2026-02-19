@@ -17,7 +17,6 @@ export interface CaptureInput {
   title: string;
   body: string;
   tags?: string[];
-  sources?: MemoryEntryMeta["sources"];
   org?: string;
 }
 
@@ -53,9 +52,6 @@ export function createMemoryService(adapter: MemoryPersistenceAdapter): MemorySe
               id,
               title: input.title,
               tags: input.tags ?? [],
-              createdAt: now,
-              updatedAt: now,
-              ...(input.sources ? { sources: input.sources } : {}),
               org: input.org ?? "default",
             },
             body: input.body,
@@ -101,7 +97,6 @@ export function createMemoryService(adapter: MemoryPersistenceAdapter): MemorySe
           meta: {
             ...entry.meta,
             ...patch,
-            updatedAt: Date.now(),
           },
           body: entry.body,
         };
@@ -112,7 +107,7 @@ export function createMemoryService(adapter: MemoryPersistenceAdapter): MemorySe
     updateBody(id: string, body: string): ResultAsync<void, MemoryPersistenceError> {
       return adapter.read(id).andThen((entry: MemoryEntry) => {
         const updated: MemoryEntry = {
-          meta: { ...entry.meta, updatedAt: Date.now() },
+          meta: entry.meta,
           body,
         };
         return adapter.write(updated);
@@ -133,7 +128,7 @@ export function createMemoryService(adapter: MemoryPersistenceAdapter): MemorySe
 
           // 2. update title — body stays the same (heading is separate from body)
           const updated: MemoryEntry = {
-            meta: { ...entry.meta, title: newTitle, updatedAt: Date.now() },
+            meta: { ...entry.meta, title: newTitle },
             body: entry.body,
           };
           const writeResult = await adapter.write(updated);
@@ -168,7 +163,7 @@ export function createMemoryService(adapter: MemoryPersistenceAdapter): MemorySe
 
             if (changed) {
               const otherUpdated: MemoryEntry = {
-                meta: { ...otherResult.value.meta, updatedAt: Date.now() },
+                meta: otherResult.value.meta,
                 body: updatedBody,
               };
               const otherWrite = await adapter.write(otherUpdated);

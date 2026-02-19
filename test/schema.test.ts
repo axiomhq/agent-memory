@@ -87,30 +87,22 @@ describe("schema", () => {
         id: "id__abc123",
         title: "Test Entry",
         tags: ["topic__test"],
-        createdAt: 1707849600000,
-        updatedAt: 1707849600000,
         org: "default",
       };
 
       expect(meta.id).toBe("id__abc123");
       expect(meta.title).toBe("Test Entry");
       expect(meta.tags).toEqual(["topic__test"]);
-      expect(meta.createdAt).toBe(1707849600000);
-      expect(meta.updatedAt).toBe(1707849600000);
     });
 
-    test("optional fields are valid", () => {
+    test("org field works", () => {
       const meta: MemoryEntryMeta = {
         id: "id__abc123",
         title: "Test Entry",
         tags: [],
-        createdAt: 1707849600000,
-        updatedAt: 1707849600000,
-        sources: { harness: "amp", threadId: "T-123" },
         org: "axiom",
       };
 
-      expect(meta.sources?.harness).toBe("amp");
       expect(meta.org).toBe("axiom");
     });
   });

@@ -33,7 +33,6 @@ export async function run(args: string[]) {
   console.log(`---`);
   console.log(`id: ${entry.meta.id}`);
   console.log(`title: ${entry.meta.title}${tags}`);
-  console.log(`created: ${new Date(entry.meta.createdAt).toISOString()}`);
   console.log(`---\n`);
   console.log(entry.body);
 }

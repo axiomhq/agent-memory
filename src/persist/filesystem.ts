@@ -58,15 +58,12 @@ function readEntriesFromDir(dir: string, org: string): Array<{ meta: MemoryEntry
       if (result.isErr()) continue;
 
       const tags = extractTags(text);
-      const now = Date.now();
 
       results.push({
         meta: {
           id,
           title: result.value.title,
           tags,
-          createdAt: now,
-          updatedAt: now,
           org,
         },
         filePath,
@@ -154,7 +151,7 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
             );
           }
 
-          entries.sort((a, b) => b.updatedAt - a.updatedAt);
+          entries.sort((a, b) => a.title.localeCompare(b.title));
 
           if (filter?.limit && filter.limit > 0) {
             entries = entries.slice(0, filter.limit);
@@ -193,15 +190,12 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
           }
 
           const tags = extractTags(text);
-          const now = Date.now();
 
           return {
             meta: {
               id,
               title: result.value.title,
               tags,
-              createdAt: now,
-              updatedAt: now,
               org: orgFromPath(filePath),
             },
             body: result.value.body,

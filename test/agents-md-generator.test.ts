@@ -14,8 +14,6 @@ const createMeta = (overrides: Partial<MemoryEntryMeta> = {}): MemoryEntryMeta =
   id: "id__abc123",
   title: "Test Entry",
   tags: [],
-  createdAt: 1707849600000,
-  updatedAt: 1707849600000,
   org: "default",
   ...overrides,
 });

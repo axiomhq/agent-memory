@@ -261,8 +261,6 @@ describe("integration tests", () => {
                   id,
                   title: entry.title,
                   tags: entry.tags,
-                  createdAt: now,
-                  updatedAt: now,
                   org: "default",
                 },
                 body: entry.body,
@@ -368,16 +366,12 @@ describe("integration tests", () => {
 
   describe("AGENTS.md generation", () => {
     it("generates section with hot and warm tiers", () => {
-      const now = Date.now();
-
       const hotEntries = [
         {
           meta: {
             id: "id__abc123",
             title: "Hot Pattern",
             tags: ["topic__core"],
-            createdAt: now,
-            updatedAt: now,
             org: "default",
           },
           body: "This is a hot-tier entry with important content.\n\nMultiple paragraphs here.",
@@ -390,8 +384,6 @@ describe("integration tests", () => {
             id: "id__def456",
             title: "Warm Tip",
             tags: ["topic__tips"],
-            createdAt: now,
-            updatedAt: now,
             org: "default",
           },
           path: "/path/to/warm.md",
@@ -503,8 +495,6 @@ Some existing content without memory section.`;
           id: id1,
           title: "old title",
           tags: ["topic__auth"],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
           org: "default",
         },
         body: "some content about auth",
@@ -542,7 +532,7 @@ Some existing content without memory section.`;
                 const readResult = await adapter.read(action.id);
                 if (readResult.isOk()) {
                   const updated: MemoryEntry = {
-                    meta: { ...readResult.value.meta, title: action.newTitle, updatedAt: Date.now() },
+                    meta: { ...readResult.value.meta, title: action.newTitle },
                     body: readResult.value.body,
                   };
                   const writeResult = await adapter.write(updated);
@@ -725,8 +715,6 @@ Some existing content without memory section.`;
                   id,
                   title: entry.title,
                   tags: entry.tags,
-                  createdAt: now,
-                  updatedAt: now,
                   org: "default",
                 },
                 body: entry.body,

@@ -54,13 +54,11 @@ describe("service + persistence", () => {
         title: "Test",
         body: "body",
         tags: ["topic__xstate", "area__testing"],
-        sources: { harness: "amp", threadId: "T-123" },
       });
 
       expect(result.isOk()).toBe(true);
       if (result.isOk()) {
         expect(result.value.meta.tags).toEqual(["topic__xstate", "area__testing"]);
-        expect(result.value.meta.sources?.threadId).toBe("T-123");
       }
     });
 

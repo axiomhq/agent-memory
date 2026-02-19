@@ -33,30 +33,18 @@ export type JournalQueueError =
   | { _tag: "journal.read"; path: string; message: string }
   | { _tag: "journal.validate"; path: string; message: string };
 
-const MemorySourcesSchema = type({
-  "harness?": "string",
-  "threadId?": "string",
-  "repo?": "string",
-  "cwd?": "string",
-});
-
-export type MemorySources = typeof MemorySourcesSchema.infer;
-
 /**
  * runtime memory entry metadata — all fields derived at read time.
  * id: from filename (id__XXXXXX pattern).
  * title: from # heading in body.
  * tags: from #tag syntax in body.
- * createdAt/updatedAt: from git history (fallback to Date.now() for uncommitted).
- * sources/org: optional, passed at capture time and stored inline.
+ * timestamps: from git history (not stored in entries).
+ * org: scoping namespace, defaults to "default".
  */
 export interface MemoryEntryMeta {
   id: string;
   title: string;
   tags: string[];
-  createdAt: number;
-  updatedAt: number;
-  sources?: MemorySources;
   org: string;
 }
 
