@@ -13,7 +13,6 @@ function createEntry(
   options: {
     status?: MemoryEntryMeta["status"];
     tags?: string[];
-    pinned?: boolean;
     used?: number;
   } = {},
 ): void {
@@ -24,14 +23,14 @@ function createEntry(
     status: options.status ?? "captured",
     used: options.used ?? 0,
     last_used: new Date().toISOString(),
-    pinned: options.pinned ?? false,
     createdAt: now,
     updatedAt: now,
+    org: "default",
     ...(options.tags ? { tags: options.tags } : {}),
   };
 
   const filename = `${title.toLowerCase().replace(/\s+/g, "-")} ${id}.md`;
-  const filepath = join(currentTestDir, "topics", filename);
+  const filepath = join(currentTestDir, "orgs", "default", "archive", filename);
   const content = serializeMemoryMarkdown(meta, "test body content");
   writeFileSync(filepath, content);
 }
@@ -57,7 +56,7 @@ describe("cli list", () => {
 
   beforeEach(async () => {
     currentTestDir = join(tmpdir(), `agent-memory-cli-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    mkdirSync(join(currentTestDir, "topics"), { recursive: true });
+    mkdirSync(join(currentTestDir, "orgs", "default", "archive"), { recursive: true });
 
     consoleLogSpy = spyOn(console, "log").mockImplementation(() => {});
     consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
@@ -85,7 +84,7 @@ describe("cli list", () => {
 
   test("lists entries with metadata", async () => {
     createEntry("id__abc123", "Test Entry One", { tags: ["topic__xstate"] });
-    createEntry("id__def456", "Test Entry Two", { pinned: true });
+    createEntry("id__def456", "Test Entry Two");
 
     const { run } = await import("../src/cli/list.js");
     await run([]);
@@ -99,7 +98,6 @@ describe("cli list", () => {
     expect(output).toContain("Test Entry One");
     expect(output).toContain("Test Entry Two");
     expect(output).toContain("[topic__xstate]");
-    expect(output).toContain("📌");
   });
 
   test("filters by --status flag", async () => {
@@ -136,8 +134,8 @@ describe("cli list", () => {
       createEntry(validIds[i]!, `Entry ${i}`);
     }
 
-    const topicsDir = join(currentTestDir, "topics");
-    const files = readdirSync(topicsDir);
+    const archiveDir = join(currentTestDir, "orgs", "default", "archive");
+    const files = readdirSync(archiveDir);
     expect(files.length).toBe(5);
 
     const config = (await import("../src/config.js"));

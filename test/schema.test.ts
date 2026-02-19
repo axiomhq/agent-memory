@@ -87,7 +87,7 @@ describe("schema", () => {
       status: "captured",
       used: 0,
       last_used: "2026-02-13T12:00:00Z",
-      pinned: false,
+      org: "default",
       createdAt: 1707849600000,
       updatedAt: 1707849600000,
     };

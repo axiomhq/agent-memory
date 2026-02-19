@@ -29,9 +29,9 @@ function createTestProviders(overrides: {
   commitError?: boolean;
 }) {
   const entries = overrides.entries ?? [];
-  const agentOutput = overrides.agentOutput ?? JSON.stringify({ actions: [], hotTier: [], warmTier: [] });
+  const agentOutput = overrides.agentOutput ?? JSON.stringify({ actions: [], topOfMind: [] });
 
-  let capturedGenerateInput: { hotTier: string[]; warmTier: string[]; entries: EntryForDefrag[] } | null = null;
+  let capturedGenerateInput: { topOfMind: string[]; entries: EntryForDefrag[] } | null = null;
 
   return {
     providers: {
@@ -53,7 +53,7 @@ function createTestProviders(overrides: {
 
         generateAgentsMd: fromPromise<
           void,
-          { hotTier: string[]; warmTier: string[]; entries: EntryForDefrag[] }
+          { topOfMind: string[]; entries: EntryForDefrag[] }
         >(async ({ input }) => {
           capturedGenerateInput = input;
           if (overrides.generateError) throw new Error("generateAgentsMd failed");
@@ -88,14 +88,13 @@ describe("defrag machine", () => {
         tags: ["auth"],
         used: 5,
         last_used: "2024-01-15",
-        pinned: false,
+        topOfMind: false,
         status: "promoted",
       },
     ];
     const agentOutput = JSON.stringify({
       actions: [{ type: "rename", id: "id__001", newTitle: "HMAC requires raw body" }],
-      hotTier: ["id__001"],
-      warmTier: [],
+      topOfMind: ["id__001"],
     });
 
     const { providers } = createTestProviders({ entries, agentOutput });
@@ -118,12 +117,12 @@ describe("defrag machine", () => {
         tags: ["topic"],
         used: 3,
         last_used: "2024-01-15",
-        pinned: false,
+        topOfMind: false,
         status: "promoted",
       },
     ];
 
-    const { providers } = createTestProviders({ entries, agentOutput: JSON.stringify({ actions: [], hotTier: ["id__001"], warmTier: [] }) });
+    const { providers } = createTestProviders({ entries, agentOutput: JSON.stringify({ actions: [], topOfMind: ["id__001"] }) });
     const provided = defragMachine.provide(providers);
     const actor = createActor(provided, { input: {} });
 
@@ -153,7 +152,7 @@ describe("defrag machine", () => {
         tags: [],
         used: 1,
         last_used: "2024-01-15",
-        pinned: false,
+        topOfMind: false,
         status: "promoted",
       },
     ];
@@ -177,14 +176,13 @@ describe("defrag machine", () => {
         tags: [],
         used: 1,
         last_used: "2024-01-15",
-        pinned: false,
+        topOfMind: false,
         status: "promoted",
       },
     ];
     const agentOutput = JSON.stringify({
       actions: [{ type: "archive", id: "id__001", reason: "outdated" }],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     const { providers } = createTestProviders({ entries, agentOutput, applyError: true });
@@ -206,7 +204,7 @@ describe("defrag machine", () => {
         tags: [],
         used: 1,
         last_used: "2024-01-15",
-        pinned: false,
+        topOfMind: false,
         status: "promoted",
       },
     ];
@@ -221,7 +219,7 @@ describe("defrag machine", () => {
     expect(result.context.parseError).toContain("not valid JSON");
   });
 
-  it("propagates hotTier and warmTier to generateAgentsMd", async () => {
+  it("propagates topOfMind to generateAgentsMd", async () => {
     const entries: EntryForDefrag[] = [
       {
         id: "id__001",
@@ -230,7 +228,7 @@ describe("defrag machine", () => {
         tags: ["core"],
         used: 10,
         last_used: "2024-01-20",
-        pinned: true,
+        topOfMind: true,
         status: "promoted",
       },
       {
@@ -240,14 +238,13 @@ describe("defrag machine", () => {
         tags: ["utils"],
         used: 3,
         last_used: "2024-01-10",
-        pinned: false,
+        topOfMind: false,
         status: "promoted",
       },
     ];
     const agentOutput = JSON.stringify({
       actions: [],
-      hotTier: ["id__001"],
-      warmTier: ["id__002"],
+      topOfMind: ["id__001"],
     });
 
     const { providers, getCapturedGenerateInput } = createTestProviders({ entries, agentOutput });
@@ -259,8 +256,7 @@ describe("defrag machine", () => {
 
     const captured = getCapturedGenerateInput();
     expect(captured).not.toBeNull();
-    expect(captured!.hotTier).toEqual(["id__001"]);
-    expect(captured!.warmTier).toEqual(["id__002"]);
+    expect(captured!.topOfMind).toEqual(["id__001"]);
     expect(captured!.entries).toHaveLength(2);
   });
 
@@ -273,7 +269,7 @@ describe("defrag machine", () => {
         tags: [],
         used: 1,
         last_used: "2024-01-15",
-        pinned: false,
+        topOfMind: false,
         status: "promoted",
       },
     ];
@@ -296,7 +292,7 @@ describe("defrag machine", () => {
         tags: [],
         used: 1,
         last_used: "2024-01-15",
-        pinned: false,
+        topOfMind: false,
         status: "promoted",
       },
     ];
@@ -312,9 +308,9 @@ describe("defrag machine", () => {
 
   it("handles multiple actions in agent output", async () => {
     const entries: EntryForDefrag[] = [
-      { id: "id__001", title: "a", body: "content a", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "promoted" },
-      { id: "id__002", title: "b", body: "content b", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "promoted" },
-      { id: "id__003", title: "c", body: "content c", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "promoted" },
+      { id: "id__001", title: "a", body: "content a", tags: [], used: 1, last_used: "2024-01-15", topOfMind: false, status: "promoted" },
+      { id: "id__002", title: "b", body: "content b", tags: [], used: 1, last_used: "2024-01-15", topOfMind: false, status: "promoted" },
+      { id: "id__003", title: "c", body: "content c", tags: [], used: 1, last_used: "2024-01-15", topOfMind: false, status: "promoted" },
     ];
     const agentOutput = JSON.stringify({
       actions: [
@@ -322,8 +318,7 @@ describe("defrag machine", () => {
         { type: "archive", id: "id__002", reason: "duplicate" },
         { type: "update-tags", id: "id__003", tags: ["topic__new"] },
       ],
-      hotTier: ["id__001"],
-      warmTier: ["id__003"],
+      topOfMind: ["id__001", "id__003"],
     });
 
     const { providers } = createTestProviders({ entries, agentOutput });
@@ -338,15 +333,14 @@ describe("defrag machine", () => {
 
   it("handles merge action from agent", async () => {
     const entries: EntryForDefrag[] = [
-      { id: "id__001", title: "auth a", body: "content a", tags: ["auth"], used: 2, last_used: "2024-01-15", pinned: false, status: "promoted" },
-      { id: "id__002", title: "auth b", body: "content b", tags: ["auth"], used: 3, last_used: "2024-01-16", pinned: false, status: "promoted" },
+      { id: "id__001", title: "auth a", body: "content a", tags: ["auth"], used: 2, last_used: "2024-01-15", topOfMind: false, status: "promoted" },
+      { id: "id__002", title: "auth b", body: "content b", tags: ["auth"], used: 3, last_used: "2024-01-16", topOfMind: false, status: "promoted" },
     ];
     const agentOutput = JSON.stringify({
       actions: [
         { type: "merge", sources: ["id__001", "id__002"], title: "merged auth", body: "combined content", tags: ["auth"] },
       ],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     const { providers } = createTestProviders({ entries, agentOutput });
@@ -361,7 +355,7 @@ describe("defrag machine", () => {
 
   it("handles split action from agent", async () => {
     const entries: EntryForDefrag[] = [
-      { id: "id__big", title: "large note", body: "very long content...", tags: [], used: 5, last_used: "2024-01-15", pinned: false, status: "promoted" },
+      { id: "id__big", title: "large note", body: "very long content...", tags: [], used: 5, last_used: "2024-01-15", topOfMind: false, status: "promoted" },
     ];
     const agentOutput = JSON.stringify({
       actions: [
@@ -374,8 +368,7 @@ describe("defrag machine", () => {
           ],
         },
       ],
-      hotTier: [],
-      warmTier: [],
+      topOfMind: [],
     });
 
     const { providers } = createTestProviders({ entries, agentOutput });
@@ -391,12 +384,11 @@ describe("defrag machine", () => {
   describe("WORKFLOW = DATA: snapshot serialization", () => {
     it("context is JSON-serializable (no functions)", async () => {
       const entries: EntryForDefrag[] = [
-        { id: "id__001", title: "test", body: "content", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "promoted" },
+        { id: "id__001", title: "test", body: "content", tags: [], used: 1, last_used: "2024-01-15", topOfMind: false, status: "promoted" },
       ];
       const agentOutput = JSON.stringify({
         actions: [{ type: "rename", id: "id__001", newTitle: "renamed" }],
-        hotTier: ["id__001"],
-        warmTier: [],
+        topOfMind: ["id__001"],
       });
 
       const { providers } = createTestProviders({ entries, agentOutput });
@@ -415,12 +407,11 @@ describe("defrag machine", () => {
 
     it("can restore from snapshot with fresh provide()", async () => {
       const entries: EntryForDefrag[] = [
-        { id: "id__001", title: "test", body: "content", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "promoted" },
+        { id: "id__001", title: "test", body: "content", tags: [], used: 1, last_used: "2024-01-15", topOfMind: false, status: "promoted" },
       ];
       const agentOutput = JSON.stringify({
         actions: [{ type: "rename", id: "id__001", newTitle: "renamed" }],
-        hotTier: ["id__001"],
-        warmTier: [],
+        topOfMind: ["id__001"],
       });
 
       const { providers } = createTestProviders({ entries, agentOutput });

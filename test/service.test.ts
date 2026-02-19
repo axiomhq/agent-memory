@@ -50,7 +50,6 @@ describe("service + persistence", () => {
       if (result.isOk()) {
         expect(result.value.meta.status).toBe("captured");
         expect(result.value.meta.used).toBe(0);
-        expect(result.value.meta.pinned).toBe(false);
       }
     });
 
@@ -59,14 +58,12 @@ describe("service + persistence", () => {
         title: "Test",
         body: "body",
         tags: ["topic__xstate", "area__testing"],
-        pinned: true,
         sources: { harness: "amp", threadId: "T-123" },
       });
 
       expect(result.isOk()).toBe(true);
       if (result.isOk()) {
         expect(result.value.meta.tags).toEqual(["topic__xstate", "area__testing"]);
-        expect(result.value.meta.pinned).toBe(true);
         expect(result.value.meta.sources?.threadId).toBe("T-123");
       }
     });
@@ -80,7 +77,7 @@ describe("service + persistence", () => {
       expect(result.isOk()).toBe(true);
       
       // Check file was written
-      const topicsDir = join(testDir, "topics");
+      const topicsDir = join(testDir, "orgs/default/archive");
       const files = Bun.file(".") ? [] : [];
       // The file should exist with the ID in the filename
       const id = result.isOk() ? result.value.meta.id : "";
@@ -217,7 +214,6 @@ describe("service + persistence", () => {
       const result = await service.updateMeta(created.value.meta.id, {
         title: "Updated Title",
         status: "consolidated",
-        pinned: true,
         tags: ["topic__new"],
       });
 
@@ -228,7 +224,6 @@ describe("service + persistence", () => {
       if (read.isOk()) {
         expect(read.value.meta.title).toBe("Updated Title");
         expect(read.value.meta.status).toBe("consolidated");
-        expect(read.value.meta.pinned).toBe(true);
         expect(read.value.meta.tags).toEqual(["topic__new"]);
       }
     });

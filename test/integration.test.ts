@@ -12,7 +12,7 @@ import { generateAgentsMdSection, replaceAgentsMdSection } from "../src/agents-m
 import { generateId } from "../src/id.js";
 import type { JournalForPrompt, ExistingEntryRef, ParsedKbEntry } from "../src/prompts/consolidate.js";
 import type { EntryForDefrag, DefragAction } from "../src/prompts/defrag.js";
-import type { MemoryEntry } from "../src/schema.js";
+import type { MemoryEntry, MemoryEntryMeta } from "../src/schema.js";
 
 function waitForFinal(
   actor: ReturnType<typeof createActor>,
@@ -34,7 +34,7 @@ describe("integration tests", () => {
   let testDir: string;
   let rootDir: string;
   let inboxDir: string;
-  let topicsDir: string;
+  let archiveDir: string;
   let adapter: ReturnType<typeof createFileMemoryPersistenceAdapter>;
   let service: ReturnType<typeof createMemoryService>;
 
@@ -42,9 +42,9 @@ describe("integration tests", () => {
     testDir = join(tmpdir(), `agent-memory-integration-${Date.now()}`);
     rootDir = testDir;
     inboxDir = join(testDir, "inbox");
-    topicsDir = join(testDir, "topics");
+    archiveDir = join(testDir, "orgs", "default", "archive");
     mkdirSync(inboxDir, { recursive: true });
-    mkdirSync(topicsDir, { recursive: true });
+    mkdirSync(archiveDir, { recursive: true });
     adapter = createFileMemoryPersistenceAdapter({ rootDir });
     service = createMemoryService(adapter);
   });
@@ -101,7 +101,7 @@ describe("integration tests", () => {
       expect(captureResult.isOk()).toBe(true);
       if (!captureResult.isOk()) return;
 
-      const files = readdirSync(topicsDir);
+      const files = readdirSync(archiveDir);
       expect(files.length).toBe(1);
       expect(files[0]).toMatch(/\.md$/);
       expect(files[0]).toContain(captureResult.value.meta.id);
@@ -242,9 +242,9 @@ describe("integration tests", () => {
                   status: "captured",
                   used: 0,
                   last_used: new Date().toISOString(),
-                  pinned: false,
                   createdAt: now,
                   updatedAt: now,
+                  org: "default",
                 },
                 body: entry.body,
               };
@@ -348,10 +348,10 @@ describe("integration tests", () => {
   });
 
   describe("AGENTS.md generation", () => {
-    it("generates section with hot and warm tiers", () => {
+    it("generates section with top-of-mind and archive entries", () => {
       const now = Date.now();
 
-      const hotEntries = [
+      const topOfMindEntries = [
         {
           meta: {
             id: "id__abc123",
@@ -360,40 +360,33 @@ describe("integration tests", () => {
             status: "promoted" as const,
             used: 10,
             last_used: "2024-01-20",
-            pinned: true,
             createdAt: now,
             updatedAt: now,
+            org: "default",
           },
-          body: "This is a hot-tier entry with important content.\n\nMultiple paragraphs here.",
+          body: "This is a top-of-mind entry with important content.\n\nMultiple paragraphs here.",
         },
       ];
 
-      const warmEntries = [
+      const archiveEntries: MemoryEntryMeta[] = [
         {
-          meta: {
-            id: "id__def456",
-            title: "Warm Tip",
-            tags: ["topic__tips"],
-            status: "consolidated" as const,
-            used: 3,
-            last_used: "2024-01-15",
-            pinned: false,
-            createdAt: now,
-            updatedAt: now,
-          },
-          path: "/path/to/warm.md",
+          id: "id__def456",
+          title: "Warm Tip",
+          tags: ["topic__tips"],
+          status: "consolidated" as const,
+          used: 3,
+          last_used: "2024-01-15",
+          createdAt: now,
+          updatedAt: now,
+          org: "default",
         },
       ];
 
-      const section = generateAgentsMdSection(hotEntries, warmEntries);
+      const section = generateAgentsMdSection(topOfMindEntries, archiveEntries);
 
-      expect(section).toContain("## memory");
-      expect(section).toContain("hot-tier knowledge");
-      expect(section).toContain("### Hot Pattern");
-      expect(section).toContain("This is a hot-tier entry");
-      expect(section).toContain("### warm-tier");
-      expect(section).toContain("`id__def456`: Warm Tip");
-      expect(section).toContain("[topic__tips]");
+      expect(section).toContain("## Hot Pattern - id__abc123");
+      expect(section).toContain("This is a top-of-mind entry");
+      expect(section).toContain("- [Warm Tip](id__def456)");
     });
 
     it("creates file with sentinel comments", () => {
@@ -457,7 +450,6 @@ Some existing content without memory section.`;
         title: "Important Pattern",
         body: "Use ResultAsync for all async operations.",
         tags: ["topic__patterns"],
-        pinned: true,
       });
 
       await service.capture({
@@ -470,29 +462,24 @@ Some existing content without memory section.`;
       expect(listResult.isOk()).toBe(true);
       if (!listResult.isOk()) return;
 
-      const hotIds = listResult.value.filter((e) => e.pinned || e.used > 5).map((e) => e.id);
-      const warmIds = listResult.value.filter((e) => !hotIds.includes(e.id)).map((e) => e.id);
+      const topOfMindIds = listResult.value.filter((e) => e.used > 5).map((e) => e.id);
+      const archiveIds = listResult.value.filter((e) => !topOfMindIds.includes(e.id)).map((e) => e.id);
 
-      const hotWithBody = await Promise.all(
+      const topOfMindWithBody = await Promise.all(
         listResult.value
-          .filter((e) => hotIds.includes(e.id))
+          .filter((e) => topOfMindIds.includes(e.id))
           .map(async (meta) => {
             const result = await adapter.read(meta.id);
             return result.isOk() ? { meta, body: result.value.body } : null;
           }),
       );
 
-      const hotEntries = hotWithBody.filter((e): e is NonNullable<typeof e> => e !== null);
-      const warmEntries = listResult.value
-        .filter((e) => warmIds.includes(e.id))
-        .map((meta) => ({
-          meta,
-          path: `${rootDir}/topics/${meta.id}.md`,
-        }));
+      const topOfMindEntries = topOfMindWithBody.filter((e): e is NonNullable<typeof e> => e !== null);
+      const archiveEntries = listResult.value.filter((e) => archiveIds.includes(e.id));
 
-      const section = generateAgentsMdSection(hotEntries, warmEntries);
+      const section = generateAgentsMdSection(topOfMindEntries, archiveEntries);
       expect(section).toContain("Important Pattern");
-      expect(section).toContain("Use ResultAsync");
+      expect(section).toContain("Secondary Tip");
     });
   });
 
@@ -508,9 +495,9 @@ Some existing content without memory section.`;
           status: "captured",
           used: 5,
           last_used: "2024-01-15",
-          pinned: false,
           createdAt: Date.now(),
           updatedAt: Date.now(),
+          org: "default",
         },
         body: "some content about auth",
       });
@@ -523,15 +510,14 @@ Some existing content without memory section.`;
           tags: ["topic__auth"],
           used: 5,
           last_used: "2024-01-15",
-          pinned: false,
+          topOfMind: false,
           status: "captured",
         },
       ];
 
       const mockAgentOutput = JSON.stringify({
         actions: [{ type: "rename", id: id1, newTitle: "Auth Best Practices" }],
-        hotTier: [id1],
-        warmTier: [],
+        topOfMind: [id1],
       });
 
       const appliedRenames: Array<{ id: string; newTitle: string }> = [];
@@ -567,7 +553,7 @@ Some existing content without memory section.`;
 
           generateAgentsMd: fromPromise<
             void,
-            { hotTier: string[]; warmTier: string[]; entries: EntryForDefrag[] }
+            { topOfMind: string[]; entries: EntryForDefrag[] }
           >(async () => {}),
 
           commitChanges: fromPromise<void, void>(async () => {}),
@@ -590,7 +576,7 @@ Some existing content without memory section.`;
       }
     });
 
-    it("propagates hotTier and warmTier to generateAgentsMd", async () => {
+    it("propagates topOfMind to generateAgentsMd", async () => {
       const id1 = await generateId("hot entry", Date.now());
       const id2 = await generateId("warm entry", Date.now() + 1);
 
@@ -602,7 +588,7 @@ Some existing content without memory section.`;
           tags: [],
           used: 10,
           last_used: "2024-01-20",
-          pinned: true,
+          topOfMind: true,
           status: "captured",
         },
         {
@@ -612,18 +598,17 @@ Some existing content without memory section.`;
           tags: [],
           used: 3,
           last_used: "2024-01-15",
-          pinned: false,
+          topOfMind: false,
           status: "captured",
         },
       ];
 
       const mockAgentOutput = JSON.stringify({
         actions: [],
-        hotTier: [id1],
-        warmTier: [id2],
+        topOfMind: [id1],
       });
 
-      let capturedInput: { hotTier: string[]; warmTier: string[] } | null = null;
+      let capturedInput: { topOfMind: string[] } | null = null;
 
       const providers = {
         actors: {
@@ -637,9 +622,9 @@ Some existing content without memory section.`;
 
           generateAgentsMd: fromPromise<
             void,
-            { hotTier: string[]; warmTier: string[]; entries: EntryForDefrag[] }
+            { topOfMind: string[]; entries: EntryForDefrag[] }
           >(async ({ input }) => {
-            capturedInput = { hotTier: input.hotTier, warmTier: input.warmTier };
+            capturedInput = { topOfMind: input.topOfMind };
           }),
 
           commitChanges: fromPromise<void, void>(async () => {}),
@@ -652,8 +637,7 @@ Some existing content without memory section.`;
       const result = await waitForFinal(actor);
       expect(result.value).toBe("completed");
       expect(capturedInput).not.toBeNull();
-      expect(capturedInput!.hotTier).toEqual([id1]);
-      expect(capturedInput!.warmTier).toEqual([id2]);
+      expect(capturedInput!.topOfMind).toEqual([id1]);
     });
   });
 
@@ -745,9 +729,9 @@ Some existing content without memory section.`;
                   status: "captured",
                   used: 0,
                   last_used: new Date().toISOString(),
-                  pinned: false,
                   createdAt: now,
                   updatedAt: now,
+                  org: "default",
                 },
                 body: entry.body,
               };
@@ -799,10 +783,10 @@ Some existing content without memory section.`;
       const readResult = await adapter.read(writtenIds[0]!);
       expect(readResult.isOk()).toBe(true);
       if (readResult.isOk()) {
-        const hotEntries = [{ meta: readResult.value.meta, body: readResult.value.body }];
-        const warmEntries: Array<{ meta: typeof readResult.value.meta; path: string }> = [];
+        const topOfMindEntries = [{ meta: readResult.value.meta, body: readResult.value.body }];
+        const archiveEntries: MemoryEntryMeta[] = [];
 
-        const section = generateAgentsMdSection(hotEntries, warmEntries);
+        const section = generateAgentsMdSection(topOfMindEntries, archiveEntries);
         expect(section).toContain("Project Convention");
         expect(section).toContain("kebab-case");
       }

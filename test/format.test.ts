@@ -8,7 +8,7 @@ const createMeta = (overrides: Partial<MemoryEntryMeta> = {}): MemoryEntryMeta =
   status: "captured",
   used: 0,
   last_used: "2026-02-13T12:00:00Z",
-  pinned: false,
+  org: "default",
   createdAt: 1707849600000,
   updatedAt: 1707849600000,
   ...overrides,
@@ -54,7 +54,6 @@ describe("format", () => {
       const meta = createMeta({
         tags: ["topic__test"],
         used: 5,
-        pinned: true,
       });
       const body = "Test body content\n\nwith multiple lines.";
 
@@ -67,7 +66,6 @@ describe("format", () => {
         expect(parsed.value.meta.title).toBe(meta.title);
         expect(parsed.value.meta.tags).toEqual(meta.tags);
         expect(parsed.value.meta.used).toBe(5);
-        expect(parsed.value.meta.pinned).toBe(true);
         expect(parsed.value.body.trim()).toBe(body.trim());
       }
     });
