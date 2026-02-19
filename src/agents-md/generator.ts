@@ -1,60 +1,60 @@
 /**
- * AGENTS.md generator — produces hot/warm/cold tiered memory section.
+ * AGENTS.md generator — produces memory section with top-of-mind inlined
+ * and all other entries listed as [title](id__XXXXXX).
+ *
  * uses sentinel comments for idempotent replacement.
  */
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
-import { join } from "path";
-import type { MemoryEntry, MemoryEntryMeta } from "../schema.js";
+import type { MemoryEntryMeta } from "../schema.js";
 
 const SECTION_START = "<!-- agent-memory:start -->";
 const SECTION_END = "<!-- agent-memory:end -->";
-
-export interface AgentsMdOptions {
-  targets: string[];
-}
 
 export interface EntryWithBody {
   meta: MemoryEntryMeta;
   body: string;
 }
 
+/**
+ * generates the memory section content.
+ *
+ * topOfMindEntries: inlined fully as `## title - id__XXXXXX` + body
+ * archiveEntries: listed as `- [title](id__XXXXXX)`
+ *
+ * top-of-mind entries are NOT included in the archive list.
+ */
 export function generateAgentsMdSection(
-  hotEntries: EntryWithBody[],
-  warmEntries: Array<{ meta: MemoryEntryMeta; path: string }>,
+  topOfMindEntries: EntryWithBody[],
+  archiveEntries: MemoryEntryMeta[],
 ): string {
   const lines: string[] = [];
 
-  lines.push("## memory");
-  lines.push("");
-  lines.push("hot-tier knowledge, always in context.");
-  lines.push("");
-
-  if (hotEntries.length > 0) {
-    for (const entry of hotEntries) {
-      lines.push(`### ${entry.meta.title}`);
+  if (topOfMindEntries.length > 0) {
+    for (const entry of topOfMindEntries) {
+      lines.push(`## ${entry.meta.title} - ${entry.meta.id}`);
       lines.push("");
       lines.push(entry.body.trim());
       lines.push("");
     }
-  } else {
-    lines.push("_no hot-tier entries yet._");
-    lines.push("");
   }
 
-  if (warmEntries.length > 0) {
-    lines.push("---");
-    lines.push("");
-    lines.push("### warm-tier");
-    lines.push("");
-    for (const entry of warmEntries) {
-      const tags = entry.meta.tags?.length ? ` [${entry.meta.tags.join(", ")}]` : "";
-      lines.push(`- \`${entry.meta.id}\`: ${entry.meta.title}${tags}`);
+  if (archiveEntries.length > 0) {
+    if (topOfMindEntries.length > 0) {
+      lines.push("---");
+      lines.push("");
+    }
+
+    for (const entry of archiveEntries) {
+      lines.push(`- [${entry.title}](${entry.id})`);
     }
     lines.push("");
   }
 
-  lines.push("browse all: `memory list` | read: `memory read <id>`");
+  if (topOfMindEntries.length === 0 && archiveEntries.length === 0) {
+    lines.push("_no memory entries yet._");
+    lines.push("");
+  }
 
   return lines.join("\n");
 }
@@ -85,34 +85,4 @@ export function replaceAgentsMdSection(targetPath: string, newSection: string): 
   const after = existing.slice(endIdx + SECTION_END.length);
   const updated = before + wrapped + after;
   writeFileSync(targetPath, updated, "utf-8");
-}
-
-export interface TierAssignment {
-  hotIds: string[];
-  warmIds: string[];
-}
-
-export function assignTiers(
-  entries: MemoryEntryMeta[],
-  hotIds: string[],
-  warmIds: string[],
-): { hot: MemoryEntryMeta[]; warm: MemoryEntryMeta[]; cold: MemoryEntryMeta[] } {
-  const hotSet = new Set(hotIds);
-  const warmSet = new Set(warmIds);
-
-  const hot: MemoryEntryMeta[] = [];
-  const warm: MemoryEntryMeta[] = [];
-  const cold: MemoryEntryMeta[] = [];
-
-  for (const entry of entries) {
-    if (hotSet.has(entry.id)) {
-      hot.push(entry);
-    } else if (warmSet.has(entry.id)) {
-      warm.push(entry);
-    } else {
-      cold.push(entry);
-    }
-  }
-
-  return { hot, warm, cold };
 }
