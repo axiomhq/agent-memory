@@ -10,6 +10,7 @@ import { consolidateMachine } from "../src/machines/consolidate.js";
 import { defragMachine } from "../src/machines/defrag.js";
 import { generateAgentsMdSection, replaceAgentsMdSection } from "../src/agents-md/generator.js";
 import { generateId } from "../src/id.js";
+import { extractLinks } from "../src/links.js";
 import type { JournalForPrompt, ExistingEntryRef, ParsedKbEntry } from "../src/prompts/consolidate.js";
 import type { EntryForDefrag, DefragAction } from "../src/prompts/defrag.js";
 import type { MemoryEntry } from "../src/schema.js";
@@ -87,6 +88,30 @@ describe("integration tests", () => {
       // reading again produces same result — no mutation
       const readResult2 = await service.read(id);
       expect(readResult2.isOk()).toBe(true);
+    });
+
+    it("read returns body with links extractable via extractLinks", async () => {
+      const entry1 = await service.capture({ title: "Entry A", body: "some context", tags: [] });
+      expect(entry1.isOk()).toBe(true);
+      if (!entry1.isOk()) return;
+
+      const id1 = entry1.value.meta.id;
+      const entry2 = await service.capture({
+        title: "Entry B",
+        body: `references [[${id1}|Entry A]] inline`,
+        tags: [],
+      });
+      expect(entry2.isOk()).toBe(true);
+      if (!entry2.isOk()) return;
+
+      const readResult = await service.read(entry2.value.meta.id);
+      expect(readResult.isOk()).toBe(true);
+      if (!readResult.isOk()) return;
+
+      const links = extractLinks(readResult.value.body);
+      expect(links).toHaveLength(1);
+      expect(links[0]!.id).toBe(id1);
+      expect(links[0]!.displayText).toBe("Entry A");
     });
 
     it("persists entries to filesystem", async () => {
