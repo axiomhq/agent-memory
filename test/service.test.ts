@@ -199,6 +199,75 @@ describe("service + persistence", () => {
     });
   });
 
+  describe("rename", () => {
+    test("updates title and filename", async () => {
+      const created = await service.capture({ title: "Old Title", body: "body content" });
+      if (!created.isOk()) return;
+      const id = created.value.meta.id;
+
+      const result = await service.rename(id, "New Title");
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+
+      const read = await service.read(id);
+      expect(read.isOk()).toBe(true);
+      if (read.isOk()) {
+        expect(read.value.meta.title).toBe("New Title");
+        expect(read.value.body).toContain("body content");
+      }
+    });
+
+    test("updates inbound link display text matching old title", async () => {
+      const entryB = await service.capture({ title: "Entry B", body: "b content" });
+      if (!entryB.isOk()) return;
+      const idB = entryB.value.meta.id;
+
+      const entryA = await service.capture({
+        title: "Entry A",
+        body: `see [[${idB}|Entry B]] for context`,
+      });
+      if (!entryA.isOk()) return;
+      const idA = entryA.value.meta.id;
+
+      const result = await service.rename(idB, "Renamed B");
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+      expect(result.value.updatedInboundLinks).toBe(1);
+
+      const readA = await service.read(idA);
+      expect(readA.isOk()).toBe(true);
+      if (readA.isOk()) {
+        expect(readA.value.body).toContain(`[[${idB}|Renamed B]]`);
+      }
+    });
+
+    test("preserves custom display text on inbound links", async () => {
+      const entryB = await service.capture({ title: "Entry B", body: "b content" });
+      if (!entryB.isOk()) return;
+      const idB = entryB.value.meta.id;
+
+      // entry A links to B with CUSTOM display text (not matching title)
+      const entryA = await service.capture({
+        title: "Entry A",
+        body: `see [[${idB}|my custom label]] here`,
+      });
+      if (!entryA.isOk()) return;
+      const idA = entryA.value.meta.id;
+
+      const result = await service.rename(idB, "Renamed B");
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+      expect(result.value.updatedInboundLinks).toBe(0);
+
+      // custom display text should be preserved
+      const readA = await service.read(idA);
+      expect(readA.isOk()).toBe(true);
+      if (readA.isOk()) {
+        expect(readA.value.body).toContain(`[[${idB}|my custom label]]`);
+      }
+    });
+  });
+
   describe("remove", () => {
     test("deletes entry", async () => {
       const created = await service.capture({ title: "To Delete", body: "body" });

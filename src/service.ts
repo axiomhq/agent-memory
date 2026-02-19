@@ -9,6 +9,7 @@
 
 import { ResultAsync } from "neverthrow";
 import { generateId } from "./id.js";
+import { extractLinks } from "./links.js";
 import type { MemoryEntry, MemoryEntryMeta } from "./schema.js";
 import type { MemoryPersistenceAdapter, MemoryPersistenceError, MemoryListFilter } from "./persist/index.js";
 
@@ -30,6 +31,7 @@ export interface MemoryService {
     patch: Partial<Pick<MemoryEntryMeta, "tags" | "title">>,
   ): ResultAsync<void, MemoryPersistenceError>;
   updateBody(id: string, body: string): ResultAsync<void, MemoryPersistenceError>;
+  rename(id: string, newTitle: string): ResultAsync<{ updatedInboundLinks: number }, MemoryPersistenceError>;
 }
 
 export function createMemoryService(adapter: MemoryPersistenceAdapter): MemoryService {
@@ -109,6 +111,78 @@ export function createMemoryService(adapter: MemoryPersistenceAdapter): MemorySe
         };
         return adapter.write(updated);
       });
+    },
+
+    rename(
+      id: string,
+      newTitle: string,
+    ): ResultAsync<{ updatedInboundLinks: number }, MemoryPersistenceError> {
+      return ResultAsync.fromPromise(
+        (async () => {
+          // 1. read the entry being renamed
+          const readResult = await adapter.read(id);
+          if (readResult.isErr()) throw readResult.error;
+          const entry = readResult.value;
+          const oldTitle = entry.meta.title;
+
+          // 2. update title — body stays the same (heading is separate from body)
+          const updated: MemoryEntry = {
+            meta: { ...entry.meta, title: newTitle, updatedAt: Date.now() },
+            body: entry.body,
+          };
+          const writeResult = await adapter.write(updated);
+          if (writeResult.isErr()) throw writeResult.error;
+
+          // 3. scan all entries for inbound links to this id, update display text
+          let updatedInboundLinks = 0;
+          const allEntries = await adapter.list();
+          if (allEntries.isErr()) throw allEntries.error;
+
+          for (const meta of allEntries.value) {
+            if (meta.id === id) continue;
+
+            const otherResult = await adapter.read(meta.id);
+            if (otherResult.isErr()) continue;
+
+            const links = extractLinks(otherResult.value.body);
+            const inboundLinks = links.filter((l) => l.id === id);
+            if (inboundLinks.length === 0) continue;
+
+            // only update display text that matches old title
+            let updatedBody = otherResult.value.body;
+            let changed = false;
+            for (const link of inboundLinks) {
+              if (link.displayText === oldTitle) {
+                const oldLink = `[[${id}|${oldTitle}]]`;
+                const newLink = `[[${id}|${newTitle}]]`;
+                updatedBody = updatedBody.replace(oldLink, newLink);
+                changed = true;
+              }
+            }
+
+            if (changed) {
+              const otherUpdated: MemoryEntry = {
+                meta: { ...otherResult.value.meta, updatedAt: Date.now() },
+                body: updatedBody,
+              };
+              const otherWrite = await adapter.write(otherUpdated);
+              if (otherWrite.isOk()) updatedInboundLinks++;
+            }
+          }
+
+          return { updatedInboundLinks };
+        })(),
+        (e): MemoryPersistenceError => {
+          if ((e as { _tag?: string })._tag?.startsWith("memory.persist")) {
+            return e as MemoryPersistenceError;
+          }
+          return {
+            _tag: "memory.persist.write",
+            path: id,
+            message: e instanceof Error ? e.message : String(e),
+          };
+        },
+      );
     },
   };
 }
