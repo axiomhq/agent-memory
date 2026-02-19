@@ -21,8 +21,8 @@
         "bun run test passes"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "READ the flat-archive plan in thread T-019c767b and ADR 0001 (docs/adr/0001-notes-and-links-memory-model.md) FIRST. The user said: 'I absolutelly despise the idea of a folder called topics. we want: inbox for unprocessed entries, archive for processed entries.' Journal queue already uses inbox/. Memory entries currently go to topics/ — they should go to archive/. The layout should be: orgs/{org}/inbox/ (journal), orgs/{org}/archive/ (entries), orgs/{org}/output-agents.md (generated). No top-level dirs — everything under orgs/. Default org is 'default'. IMPORTANT: inbox/ is the journal queue dir, already handled by journal.ts — this story only changes where MEMORY ENTRIES are stored (topics/ → archive/). Do NOT touch journal queue logic."
+      "passes": true,
+      "notes": "DONE: commit aa2f35d. READ the flat-archive plan in thread T-019c767b and ADR 0001 (docs/adr/0001-notes-and-links-memory-model.md) FIRST. The user said: 'I absolutelly despise the idea of a folder called topics. we want: inbox for unprocessed entries, archive for processed entries.' Journal queue already uses inbox/. Memory entries currently go to topics/ — they should go to archive/. The layout should be: orgs/{org}/inbox/ (journal), orgs/{org}/archive/ (entries), orgs/{org}/output-agents.md (generated). No top-level dirs — everything under orgs/. Default org is 'default'. IMPORTANT: inbox/ is the journal queue dir, already handled by journal.ts — this story only changes where MEMORY ENTRIES are stored (topics/ → archive/). Do NOT touch journal queue logic."
     },
     {
       "id": "US-002",
@@ -44,8 +44,8 @@
         "bun run test passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "The user said 'git is source of truth' for timestamps. This was misinterpreted as 'build a utility to extract git timestamps' — the actual intent was 'don't store timestamps at all, git already has this info.' The persistence adapter currently fakes timestamps with Date.now() on every read — they're meaningless noise. If defrag needs recency it can shell out to git directly. sources belongs in git commit messages per user instruction: 'put it in the commit associated with an operation.' CAUTION: check if anything in prompts/defrag.ts, agents-md/generator.ts, or machines/ references these fields. Update EntryForDefrag if needed."
+      "passes": true,
+      "notes": "DONE: commit 59f50ec. The user said 'git is source of truth' for timestamps. This was misinterpreted as 'build a utility to extract git timestamps' — the actual intent was 'don't store timestamps at all, git already has this info.' The persistence adapter currently fakes timestamps with Date.now() on every read — they're meaningless noise. If defrag needs recency it can shell out to git directly. sources belongs in git commit messages per user instruction: 'put it in the commit associated with an operation.' CAUTION: check if anything in prompts/defrag.ts, agents-md/generator.ts, or machines/ references these fields. Update EntryForDefrag if needed."
     },
     {
       "id": "US-003",
@@ -69,8 +69,8 @@
         "bun run test passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "ADR 0001 principle 4: 'top-of-mind is an index note, not a property. a special index note links to the entries that should be inlined in the consumer's system prompt. defrag updates the index, not the entries. entries don't know they're top of mind.' The user confirmed: the index note gets a deterministic ID, it is just a note — an important one, but just a note. The defrag prompt should instruct the LLM: 'Decide which entries are TOP OF MIND — foundational, actively relevant, well-connected in the link graph. These will be inlined in the agent's system prompt. Everything else is listed by title+id.' The three-tier concept (hot/warm/cold) is replaced by a binary: top-of-mind (inlined) vs everything else (listed)."
+      "passes": true,
+      "notes": "DONE: commits 4eb2847 + ac699f7. ADR 0001 principle 4: 'top-of-mind is an index note, not a property. a special index note links to the entries that should be inlined in the consumer's system prompt. defrag updates the index, not the entries. entries don't know they're top of mind.' The user confirmed: the index note gets a deterministic ID, it is just a note — an important one, but just a note. The defrag prompt should instruct the LLM: 'Decide which entries are TOP OF MIND — foundational, actively relevant, well-connected in the link graph. These will be inlined in the agent's system prompt. Everything else is listed by title+id.' The three-tier concept (hot/warm/cold) is replaced by a binary: top-of-mind (inlined) vs everything else (listed)."
     },
     {
       "id": "US-004",
@@ -91,8 +91,8 @@
         "bun run test passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": "The user specified the exact format for top-of-mind entries: '## title - id__12345\\n\\ncontent content content' — shown BEFORE the rest, exclusively inlined, not present in the other list. Link format is unified on [[id|text]] wiki-style everywhere — the user explicitly said to unify. The generator becomes self-sufficient: it reads the index note, follows links, fetches bodies, and produces the output. The defrag machine's generateAgentsMd actor just calls the generator without passing tiering data. This decouples generation from defrag — you could regenerate AGENTS.md without running defrag."
+      "passes": true,
+      "notes": "DONE: commit 59d7819. The user specified the exact format for top-of-mind entries: '## title - id__12345\\n\\ncontent content content' — shown BEFORE the rest, exclusively inlined, not present in the other list. Link format is unified on [[id|text]] wiki-style everywhere — the user explicitly said to unify. The generator becomes self-sufficient: it reads the index note, follows links, fetches bodies, and produces the output. The defrag machine's generateAgentsMd actor just calls the generator without passing tiering data. This decouples generation from defrag — you could regenerate AGENTS.md without running defrag."
     },
     {
       "id": "US-005",
@@ -109,8 +109,8 @@
         "bun run test passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": "The user specified the directory layout: 'orgs/<orgname>/inbox/, orgs/<orgname>/archive/, orgs/<orgname>/output-agents.md, readme.md'. axi-agent changes to read from this path are a SEPARATE PRD. This story only changes where agent-memory writes the output. The defrag machine needs to know which org it's defragging — ensure org flows through from DefragInput to the generateAgentsMd actor."
+      "passes": true,
+      "notes": "DONE: commit f917dab. The user specified the directory layout: 'orgs/<orgname>/inbox/, orgs/<orgname>/archive/, orgs/<orgname>/output-agents.md, readme.md'. axi-agent changes to read from this path are a SEPARATE PRD. This story only changes where agent-memory writes the output. The defrag machine needs to know which org it's defragging — ensure org flows through from DefragInput to the generateAgentsMd actor."
     }
   ]
 }
