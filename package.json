@@ -15,7 +15,8 @@
     "./adapters/amp": "./src/adapters/amp.ts",
     "./prompts/consolidate": "./src/prompts/consolidate.ts",
     "./tags": "./src/tags.ts",
-    "./links": "./src/links.ts"
+    "./links": "./src/links.ts",
+    "./timestamps": "./src/timestamps.ts"
   },
   "bin": {
     "memory": "./src/cli/index.ts"
