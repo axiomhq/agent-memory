@@ -43,8 +43,8 @@
         "bun run test passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "A tag is # followed by word characters (a-z0-9_), NOT preceded by a word character, NOT at line start followed by space (heading). Keep extraction rules precise to avoid false positives."
+      "passes": true,
+      "notes": "DONE: commit f18338f. src/tags.ts with extractTags(body) — handles headings, code blocks, hex colors, URLs. Replaced extractTagsSimple in persist/filesystem.ts. 17 tests in test/tags.test.ts. Export added to package.json."
     },
     {
       "id": "US-003",
@@ -63,8 +63,8 @@
         "bun run test passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "ID validation: must match id__ followed by 6 base58 chars. Use the existing ID_PATTERN from id.ts."
+      "passes": true,
+      "notes": "DONE: commit ab365c6. src/links.ts with extractLinks(body) and replaceLink(body, oldId, newId). Handles full/short form, code blocks, position tracking. 19 tests in test/links.test.ts. Export added to package.json."
     },
     {
       "id": "US-004",
@@ -82,8 +82,8 @@
         "bun run test passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": "Shells out to git via Bun shell ($). Tests must init a temp git repo with at least one commit. Consider caching results during a single list() call to avoid N git invocations."
+      "passes": true,
+      "notes": "DONE: commit 4769f87. src/timestamps.ts with getFileTimestamps(rootDir, filePath) returning {createdAt, updatedAt} from git log. Falls back to Date.now() for uncommitted/untracked. Uses Bun.spawn. 5 tests with real temp git repos. Export added to package.json."
     },
     {
       "id": "US-005",
@@ -101,8 +101,8 @@
         "bun run test passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": "Depends on US-001 (schema), US-002 (tags), US-003 (links). The adapter interface shape (list/read/write/delete) stays the same — only the implementation changes."
+      "passes": true,
+      "notes": "DONE: commit 6c0f3f9. extractTags wired in US-002 commit. extractLinks available via body. buildFilename already produces 'slug id__XXXXXX.md'. No _top-of-mind handling in adapter. Added integration test for link roundtrip."
     },
     {
       "id": "US-006",
@@ -121,8 +121,8 @@
         "bun run test passes"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": "Depends on US-003 (links) and US-005 (adapter). Uses replaceLink() internally. O(n) scan over all entries — fine at current scale."
+      "passes": true,
+      "notes": "DONE: commit e3b1419. service.rename(id, newTitle) updates title+filename, scans all entries for inbound [[id|oldTitle]] links and updates display text to newTitle. Preserves custom display text. 3 tests in service.test.ts."
     },
     {
       "id": "US-007",
@@ -139,8 +139,8 @@
         "bun run test passes"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": "Depends on US-003 (links) and US-005 (adapter). These methods read all entries and build the graph in memory. Acceptable at current scale."
+      "passes": true,
+      "notes": "DONE: commit 904176e. service.links(id) returns {inbound, outbound}. service.orphans() returns ids with zero inbound. service.brokenLinks() returns links to nonexistent entries. 5 tests in service.test.ts. O(n) scan — fine at current scale."
     },
     {
       "id": "US-008",
@@ -183,8 +183,8 @@
         "bun run test passes"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": "Depends on US-001 (new format). Must handle both old header formats: '<!-- agent-memory:meta' and '<!-- axi-agent:memory-meta' (legacy). Run AFTER deploying new code so the new adapter can read the migrated files."
+      "passes": true,
+      "notes": "DONE: commit b411b2b. src/cli/migrate-to-v2.ts handles both old headers (agent-memory:meta, axi-agent:memory-meta). Strips metadata, writes pure markdown. Handles _top-of-mind prefix and -- tag section in filenames. --dry-run and --root-dir flags. 9 tests including idempotency and roundtrip. Runnable via bun run src/cli/migrate-to-v2.ts."
     }
   ]
 }
