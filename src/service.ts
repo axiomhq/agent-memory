@@ -12,7 +12,6 @@ export interface CaptureInput {
   title: string;
   body: string;
   tags?: string[];
-  pinned?: boolean;
   sources?: MemoryEntryMeta["sources"];
   org?: string;
 }
@@ -24,7 +23,7 @@ export interface MemoryService {
   remove(id: string): ResultAsync<void, MemoryPersistenceError>;
   updateMeta(
     id: string,
-    patch: Partial<Pick<MemoryEntryMeta, "status" | "tags" | "title" | "pinned">>,
+    patch: Partial<Pick<MemoryEntryMeta, "status" | "tags" | "title">>,
   ): ResultAsync<void, MemoryPersistenceError>;
   updateBody(id: string, body: string): ResultAsync<void, MemoryPersistenceError>;
 }
@@ -45,11 +44,10 @@ export function createMemoryService(adapter: MemoryPersistenceAdapter): MemorySe
               status: "captured",
               used: 0,
               last_used: new Date().toISOString(),
-              pinned: input.pinned ?? false,
               createdAt: now,
               updatedAt: now,
               ...(input.sources ? { sources: input.sources } : {}),
-              ...(input.org ? { org: input.org } : {}),
+              org: input.org ?? "default",
             },
             body: input.body,
           };
@@ -99,7 +97,7 @@ export function createMemoryService(adapter: MemoryPersistenceAdapter): MemorySe
 
     updateMeta(
       id: string,
-      patch: Partial<Pick<MemoryEntryMeta, "status" | "tags" | "title" | "pinned">>,
+      patch: Partial<Pick<MemoryEntryMeta, "status" | "tags" | "title">>,
     ): ResultAsync<void, MemoryPersistenceError> {
       return adapter.read(id).andThen((entry: MemoryEntry) => {
         const updated: MemoryEntry = {

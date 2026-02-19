@@ -46,11 +46,10 @@ export const MemoryEntryMetaSchema = type({
   status: "'captured' | 'consolidated' | 'promoted'",
   used: "number >= 0",
   last_used: "string",
-  pinned: "boolean",
   createdAt: "number",
   updatedAt: "number",
   "sources?": MemorySourcesSchema,
-  "org?": type("string").matching(SAFE_ORG_PATTERN),
+  org: type("string").matching(SAFE_ORG_PATTERN),
 });
 
 export type MemoryEntryMeta = typeof MemoryEntryMetaSchema.infer;
