@@ -1,6 +1,10 @@
 /**
  * memory service — high-level API over the persistence adapter.
- * handles ID generation, usage tracking, and read-modify-write operations.
+ * handles ID generation and CRUD operations.
+ *
+ * WHY no usage tracking: read() is now a pure read with no side effects.
+ * agents bypass service.read() via grep/file tools, making usage counters
+ * unreliable. removed per notes-and-links ADR.
  */
 
 import { ResultAsync } from "neverthrow";
@@ -12,7 +16,6 @@ export interface CaptureInput {
   title: string;
   body: string;
   tags?: string[];
-  pinned?: boolean;
   sources?: MemoryEntryMeta["sources"];
   org?: string;
 }
@@ -24,7 +27,7 @@ export interface MemoryService {
   remove(id: string): ResultAsync<void, MemoryPersistenceError>;
   updateMeta(
     id: string,
-    patch: Partial<Pick<MemoryEntryMeta, "status" | "tags" | "title" | "pinned">>,
+    patch: Partial<Pick<MemoryEntryMeta, "tags" | "title">>,
   ): ResultAsync<void, MemoryPersistenceError>;
   updateBody(id: string, body: string): ResultAsync<void, MemoryPersistenceError>;
 }
@@ -41,11 +44,7 @@ export function createMemoryService(adapter: MemoryPersistenceAdapter): MemorySe
             meta: {
               id,
               title: input.title,
-              ...(input.tags ? { tags: input.tags } : {}),
-              status: "captured",
-              used: 0,
-              last_used: new Date().toISOString(),
-              pinned: input.pinned ?? false,
+              tags: input.tags ?? [],
               createdAt: now,
               updatedAt: now,
               ...(input.sources ? { sources: input.sources } : {}),
@@ -78,19 +77,7 @@ export function createMemoryService(adapter: MemoryPersistenceAdapter): MemorySe
     },
 
     read(id: string): ResultAsync<MemoryEntry, MemoryPersistenceError> {
-      return adapter.read(id).andThen((entry: MemoryEntry) => {
-        const now = Date.now();
-        const updated: MemoryEntry = {
-          meta: {
-            ...entry.meta,
-            used: entry.meta.used + 1,
-            last_used: new Date().toISOString(),
-            updatedAt: now,
-          },
-          body: entry.body,
-        };
-        return adapter.write(updated).map(() => updated);
-      });
+      return adapter.read(id);
     },
 
     remove(id: string): ResultAsync<void, MemoryPersistenceError> {
@@ -99,7 +86,7 @@ export function createMemoryService(adapter: MemoryPersistenceAdapter): MemorySe
 
     updateMeta(
       id: string,
-      patch: Partial<Pick<MemoryEntryMeta, "status" | "tags" | "title" | "pinned">>,
+      patch: Partial<Pick<MemoryEntryMeta, "tags" | "title">>,
     ): ResultAsync<void, MemoryPersistenceError> {
       return adapter.read(id).andThen((entry: MemoryEntry) => {
         const updated: MemoryEntry = {

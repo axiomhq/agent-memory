@@ -6,17 +6,13 @@ import {
 } from "../src/prompts/defrag.js";
 
 describe("buildDefragPrompt", () => {
-  it("includes entry id, title, body, and stats", () => {
+  it("includes entry id, title, and body", () => {
     const entries: EntryForDefrag[] = [
       {
         id: "id__abc123",
         title: "test entry",
         body: "some content here",
         tags: [],
-        used: 5,
-        last_used: "2024-01-15",
-        pinned: false,
-        status: "promoted",
       },
     ];
 
@@ -25,9 +21,6 @@ describe("buildDefragPrompt", () => {
     expect(prompt).toContain("id__abc123");
     expect(prompt).toContain("test entry");
     expect(prompt).toContain("some content here");
-    expect(prompt).toContain("used: 5");
-    expect(prompt).toContain("last_used: 2024-01-15");
-    expect(prompt).toContain("pinned: false");
   });
 
   it("includes tags when present", () => {
@@ -37,10 +30,6 @@ describe("buildDefragPrompt", () => {
         title: "tagged entry",
         body: "content",
         tags: ["topic__foo", "area__bar"],
-        used: 1,
-        last_used: "2024-01-01",
-        pinned: false,
-        status: "promoted",
       },
     ];
 
@@ -57,10 +46,6 @@ describe("buildDefragPrompt", () => {
         title: "long entry",
         body: longBody,
         tags: [],
-        used: 1,
-        last_used: "2024-01-01",
-        pinned: false,
-        status: "promoted",
       },
     ];
 
@@ -70,34 +55,33 @@ describe("buildDefragPrompt", () => {
     expect(prompt).not.toContain("x".repeat(600));
   });
 
-  it("includes pinned true status", () => {
-    const entries: EntryForDefrag[] = [
-      {
-        id: "id__pinned",
-        title: "pinned entry",
-        body: "important",
-        tags: [],
-        used: 10,
-        last_used: "2024-01-20",
-        pinned: true,
-        status: "promoted",
-      },
-    ];
-
-    const prompt = buildDefragPrompt(entries);
-
-    expect(prompt).toContain("pinned: true");
-  });
-
   it("includes tiering instructions with hot/warm/cold criteria", () => {
     const prompt = buildDefragPrompt([]);
 
     expect(prompt).toContain("Hot tier");
     expect(prompt).toContain("Warm tier");
     expect(prompt).toContain("Cold tier");
-    expect(prompt).toContain("frequently used");
     expect(prompt).toContain("foundational");
-    expect(prompt).toContain("pinned");
+    expect(prompt).toContain("content relevance");
+  });
+
+  it("does not reference dead fields (used, last_used, pinned)", () => {
+    const entries: EntryForDefrag[] = [
+      {
+        id: "id__abc123",
+        title: "test",
+        body: "content",
+        tags: [],
+      },
+    ];
+
+    const prompt = buildDefragPrompt(entries);
+
+    expect(prompt).not.toContain("used:");
+    expect(prompt).not.toContain("last_used:");
+    expect(prompt).not.toContain("pinned:");
+    expect(prompt).not.toContain("used counter");
+    expect(prompt).not.toContain("pinned: true is a strong signal");
   });
 
   it("includes all action types in JSON schema", () => {
@@ -125,20 +109,12 @@ describe("buildDefragPrompt", () => {
         title: "first",
         body: "content one",
         tags: [],
-        used: 1,
-        last_used: "2024-01-01",
-        pinned: false,
-        status: "promoted",
       },
       {
         id: "id__two",
         title: "second",
         body: "content two",
         tags: [],
-        used: 2,
-        last_used: "2024-01-02",
-        pinned: false,
-        status: "promoted",
       },
     ];
 
@@ -256,7 +232,7 @@ describe("parseDefragOutput", () => {
 
   it("parses archive action", () => {
     const raw = JSON.stringify({
-      actions: [{ type: "archive", id: "id__stale", reason: "superseded by id__new" }],
+      actions: [{ type: "archive", id: "id__old", reason: "superseded" }],
       hotTier: [],
       warmTier: [],
     });
@@ -266,8 +242,8 @@ describe("parseDefragOutput", () => {
     expect(result.actions).toHaveLength(1);
     expect(result.actions[0]).toEqual({
       type: "archive",
-      id: "id__stale",
-      reason: "superseded by id__new",
+      id: "id__old",
+      reason: "superseded",
     });
   });
 

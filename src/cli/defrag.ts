@@ -36,10 +36,6 @@ export async function run(_args: string[]) {
         title: meta.title,
         body: readResult.value.body,
         tags: meta.tags ?? [],
-        used: meta.used,
-        last_used: meta.last_used,
-        pinned: meta.pinned,
-        status: meta.status,
       });
     }
   }

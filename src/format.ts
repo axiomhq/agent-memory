@@ -1,68 +1,81 @@
 /**
- * memory entry serialization.
- * markdown files with JSON metadata in an HTML comment header.
+ * memory entry serialization — pure markdown, no metadata header.
+ *
+ * format:
+ *   # Title
+ *
+ *   #tag1 #tag2
+ *
+ *   body content here
+ *
+ * WHY pure markdown: tool-agnostic, human-readable, grep-friendly.
+ * metadata is derived at read time from filename + body + git history.
  */
 
 import { ok, err, type Result } from "neverthrow";
-import { type } from "arktype";
-import { MemoryEntryMetaSchema, type MemoryEntryMeta, type MemoryEntry } from "./schema.js";
-
-const HEADER_START = "<!-- agent-memory:meta";
-const HEADER_END = "-->";
+import type { MemoryEntry } from "./schema.js";
 
 export type FormatError = { _tag: "format.parse"; path: string; message: string };
 
-export function serializeMemoryMarkdown(meta: MemoryEntryMeta, body: string): string {
-  const json = JSON.stringify(meta, null, 2).replaceAll("-->", "--\\u003E");
-  const header = `${HEADER_START}\n${json}\n${HEADER_END}`;
-  return `${header}\n\n${body}\n`;
+/**
+ * serialize a memory entry to pure markdown.
+ * produces: # title, optional #tag line, body.
+ */
+export function serializeMemoryMarkdown(title: string, tags: string[], body: string): string {
+  const lines: string[] = [];
+
+  lines.push(`# ${title}`);
+  lines.push("");
+
+  if (tags.length > 0) {
+    lines.push(tags.map((t) => `#${t}`).join(" "));
+    lines.push("");
+  }
+
+  if (body.trim()) {
+    lines.push(body.trim());
+    lines.push("");
+  }
+
+  return lines.join("\n");
 }
 
+/**
+ * parse a pure markdown memory entry.
+ * extracts title from first # heading. id must be provided by caller (from filename).
+ * tags are extracted separately via extractTags (US-002).
+ */
 export function parseMemoryMarkdown(
   text: string,
   sourcePath: string,
-): Result<MemoryEntry, FormatError> {
-  const startIdx = text.indexOf(HEADER_START);
-  if (startIdx === -1) {
+  id: string,
+): Result<{ title: string; body: string }, FormatError> {
+  const lines = text.split("\n");
+
+  let title = "";
+  let titleLineIndex = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    const match = line.match(/^#\s+(.+)$/);
+    if (match) {
+      title = match[1]!.trim();
+      titleLineIndex = i;
+      break;
+    }
+  }
+
+  if (!title) {
     return err({
       _tag: "format.parse",
       path: sourcePath,
-      message: "missing memory metadata header",
+      message: "no # heading found in entry",
     });
   }
 
-  const jsonStart = startIdx + HEADER_START.length;
-  const endIdx = text.indexOf(HEADER_END, jsonStart);
-  if (endIdx === -1) {
-    return err({
-      _tag: "format.parse",
-      path: sourcePath,
-      message: "unterminated memory metadata header",
-    });
-  }
+  // body is everything after the title line, trimmed
+  const bodyLines = lines.slice(titleLineIndex + 1);
+  const body = bodyLines.join("\n").trim();
 
-  const jsonStr = text.slice(jsonStart, endIdx).trim().replaceAll("--\\u003E", "-->");
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(jsonStr);
-  } catch (e) {
-    return err({
-      _tag: "format.parse",
-      path: sourcePath,
-      message: `invalid JSON in metadata header: ${e instanceof Error ? e.message : String(e)}`,
-    });
-  }
-
-  const validated = MemoryEntryMetaSchema(parsed);
-  if (validated instanceof type.errors) {
-    return err({
-      _tag: "format.parse",
-      path: sourcePath,
-      message: `schema validation failed: ${validated.summary}`,
-    });
-  }
-
-  const body = text.slice(endIdx + HEADER_END.length).replace(/^\n+/, "").trimEnd();
-
-  return ok({ meta: validated, body });
+  return ok({ title, body });
 }

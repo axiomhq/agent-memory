@@ -3,16 +3,19 @@
  * directory layout:
  *   - root level: topics/, archive/ (personal, no org)
  *   - org-scoped: orgs/{org}/topics/, orgs/{org}/archive/
- * filename convention: descriptive-title -- topic__x topic__y id__XXXXXX.md
+ * filename convention: slug id__XXXXXX.md
+ *
+ * WHY no tags in filename, no _top-of-mind prefix:
+ * per notes-and-links ADR, entries are pure markdown. tags live inline
+ * in body, title from # heading, id from filename.
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync, renameSync, unlinkSync } from "fs";
 import { join, basename } from "path";
 import { ResultAsync, errAsync } from "neverthrow";
-import { type } from "arktype";
 import { isValidId } from "../id.js";
 import { serializeMemoryMarkdown, parseMemoryMarkdown } from "../format.js";
-import { MemoryEntryMetaSchema, type MemoryEntry, type MemoryEntryMeta } from "../schema.js";
+import type { MemoryEntry, MemoryEntryMeta } from "../schema.js";
 import type { MemoryPersistenceAdapter, MemoryPersistenceError, MemoryListFilter } from "./index.js";
 
 function sanitizeFilename(title: string): string {
@@ -25,17 +28,7 @@ function sanitizeFilename(title: string): string {
 
 function buildFilename(meta: MemoryEntryMeta): string {
   const titlePart = sanitizeFilename(meta.title);
-  const tagsPart = (meta.tags ?? [])
-    .filter((t) => t.startsWith("topic__"))
-    .map((t) => t.replace("topic__", "").replace(/[^a-z0-9]/g, ""))
-    .slice(0, 3)
-    .join(" ");
-  const idPart = meta.id;
-
-  if (tagsPart) {
-    return `${titlePart} -- ${tagsPart} ${idPart}.md`;
-  }
-  return `${titlePart} ${idPart}.md`;
+  return `${titlePart} ${meta.id}.md`;
 }
 
 function extractIdFromFilename(filename: string): string | null {
@@ -45,6 +38,29 @@ function extractIdFromFilename(filename: string): string | null {
 
 interface FileAdapterOptions {
   rootDir: string;
+}
+
+/**
+ * extract tags from body text. inline #tag syntax.
+ * simplified extraction — full extractTags in US-002.
+ */
+function extractTagsSimple(body: string): string[] {
+  const tags: string[] = [];
+  const lines = body.split("\n");
+
+  for (const line of lines) {
+    // skip headings
+    if (/^#+\s/.test(line)) continue;
+
+    const matches = line.matchAll(/(?<!\w)#([a-zA-Z0-9_]+(?:__[a-zA-Z0-9_]+)?)\b/g);
+    for (const match of matches) {
+      if (match[1] && !tags.includes(match[1])) {
+        tags.push(match[1]);
+      }
+    }
+  }
+
+  return tags;
 }
 
 function readEntriesFromDir(dir: string): Array<{ meta: MemoryEntryMeta; filePath: string }> {
@@ -61,12 +77,22 @@ function readEntriesFromDir(dir: string): Array<{ meta: MemoryEntryMeta; filePat
     const filePath = join(dir, file);
     try {
       const text = readFileSync(filePath, "utf-8");
-      const result = parseMemoryMarkdown(text, filePath);
+      const result = parseMemoryMarkdown(text, filePath, id);
       if (result.isErr()) continue;
 
-      if (result.value.meta.id !== id) continue;
+      const tags = extractTagsSimple(result.value.body);
+      const now = Date.now();
 
-      results.push({ meta: result.value.meta, filePath });
+      results.push({
+        meta: {
+          id,
+          title: result.value.title,
+          tags,
+          createdAt: now,
+          updatedAt: now,
+        },
+        filePath,
+      });
     } catch {
       continue;
     }
@@ -101,7 +127,7 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
   function getOrgsDirs(): string[] {
     const orgsDir = join(opts.rootDir, ORGS_DIR);
     if (!existsSync(orgsDir)) return [];
-    
+
     const orgs: string[] = [];
     for (const entry of readdirSync(orgsDir, { withFileTypes: true })) {
       if (entry.isDirectory()) {
@@ -113,7 +139,7 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
 
   function findEntryFile(id: string): string | null {
     const orgs = getOrgsDirs();
-    
+
     const allDirs: string[] = [];
     allDirs.push(getTopicsDir());
     allDirs.push(getArchiveDir());
@@ -147,10 +173,6 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
             for (const dir of [getTopicsDir(), getArchiveDir()]) {
               entries.push(...readEntriesFromDir(dir).map((e) => e.meta));
             }
-          }
-
-          if (filter?.status) {
-            entries = entries.filter((e) => e.status === filter.status);
           }
 
           if (filter?.tags && filter.tags.length > 0) {
@@ -201,12 +223,24 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
           }
 
           const text = readFileSync(filePath, "utf-8");
-          const result = parseMemoryMarkdown(text, filePath);
+          const result = parseMemoryMarkdown(text, filePath, id);
           if (result.isErr()) {
             throw new Error(result.error.message);
           }
 
-          return result.value;
+          const tags = extractTagsSimple(result.value.body);
+          const now = Date.now();
+
+          return {
+            meta: {
+              id,
+              title: result.value.title,
+              tags,
+              createdAt: now,
+              updatedAt: now,
+            },
+            body: result.value.body,
+          };
         })(),
         (e: unknown): MemoryPersistenceError => ({
           _tag: "memory.persist.read",
@@ -227,15 +261,6 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
         });
       }
 
-      const validated = MemoryEntryMetaSchema(meta);
-      if (validated instanceof type.errors) {
-        return errAsync({
-          _tag: "memory.persist.write",
-          path: meta.id,
-          message: `schema validation failed: ${validated.summary}`,
-        });
-      }
-
       return ResultAsync.fromPromise(
         (async () => {
           const targetDir = getTopicsDir(meta.org);
@@ -250,7 +275,7 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
 
           const filename = buildFilename(meta);
           const filePath = join(targetDir, filename);
-          const content = serializeMemoryMarkdown(meta, body);
+          const content = serializeMemoryMarkdown(meta.title, meta.tags, body);
 
           const tempPath = join(
             targetDir,

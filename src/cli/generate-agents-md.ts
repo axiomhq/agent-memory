@@ -28,25 +28,14 @@ export async function run(args: string[]) {
   }
 
   const entries = listResult.value;
-  const hotIds = entries.filter((e) => e.pinned || e.used > 5).map((e) => e.id);
-  const warmIds = entries.filter((e) => !hotIds.includes(e.id)).map((e) => e.id);
 
-  const hotWithBody = await Promise.all(
-    entries
-      .filter((e) => hotIds.includes(e.id))
-      .map(async (meta) => {
-        const result = await adapter.read(meta.id);
-        return result.isOk() ? { meta, body: result.value.body } : null;
-      }),
-  );
-
-  const hotEntries = hotWithBody.filter((e): e is NonNullable<typeof e> => e !== null);
-  const warmEntries = entries
-    .filter((e) => warmIds.includes(e.id))
-    .map((meta) => ({
-      meta,
-      path: `${rootDir}/topics/${meta.id}.md`,
-    }));
+  // without usage tracking, all entries are warm by default.
+  // hot tier determined by defrag agent, not heuristics.
+  const hotEntries: Array<{ meta: (typeof entries)[number]; body: string }> = [];
+  const warmEntries = entries.map((meta) => ({
+    meta,
+    path: `${rootDir}/topics/${meta.id}.md`,
+  }));
 
   const section = generateAgentsMdSection(hotEntries, warmEntries);
 

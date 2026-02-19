@@ -1,19 +1,16 @@
 /**
  * defrag prompt builder — reorganizes memory filesystem.
  * agent decides: what earns hot-tier, what to merge/split/rename/archive.
+ *
+ * tiering criteria: content relevance and tags, not usage counters.
+ * per notes-and-links ADR, used/last_used/pinned/status are removed.
  */
-
-import type { MemoryEntryMeta, MemoryEntry } from "../schema.js";
 
 export interface EntryForDefrag {
   id: string;
   title: string;
   body: string;
   tags: string[];
-  used: number;
-  last_used: string;
-  pinned: boolean;
-  status: MemoryEntryMeta["status"];
 }
 
 export interface DefragDecision {
@@ -32,9 +29,8 @@ export type DefragAction =
 export function buildDefragPrompt(entries: EntryForDefrag[]): string {
   const entriesSection = entries
     .map((e) => {
-      const stats = `used: ${e.used}, last_used: ${e.last_used}, pinned: ${e.pinned}`;
       const tags = e.tags.length > 0 ? ` [${e.tags.join(", ")}]` : "";
-      return `### ${e.id}: "${e.title}"${tags}\n${stats}\n\n${e.body.slice(0, 500)}${e.body.length > 500 ? "..." : ""}`;
+      return `### ${e.id}: "${e.title}"${tags}\n\n${e.body.slice(0, 500)}${e.body.length > 500 ? "...": ""}`;
     })
     .join("\n\n---\n\n");
 
@@ -49,11 +45,11 @@ export function buildDefragPrompt(entries: EntryForDefrag[]): string {
 
 ## Tiering criteria
 
-- **Hot tier** (inlined in AGENTS.md): frequently used, foundational, or pinned entries
+- **Hot tier** (inlined in AGENTS.md): foundational knowledge, actively relevant entries, well-tagged core content
 - **Warm tier** (paths listed): relevant but not top-tier
 - **Cold tier** (omitted): discoverable via grep/list
 
-The \`used\` counter and \`last_used\` timestamp inform but don't dictate tiering. \`pinned: true\` is a strong signal for hot tier.
+Tiering is based on content relevance, tags, and topical importance — not usage counters.
 
 ## Current entries
 

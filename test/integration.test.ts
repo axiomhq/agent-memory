@@ -56,7 +56,7 @@ describe("integration tests", () => {
   });
 
   describe("capture → list → read roundtrip", () => {
-    it("captures entry, lists it, reads it with incremented counter", async () => {
+    it("captures entry, lists it, reads it without side effects", async () => {
       const captureResult = await service.capture({
         title: "Integration Test Entry",
         body: "This tests the full capture-list-read flow.",
@@ -68,7 +68,6 @@ describe("integration tests", () => {
 
       const id = captureResult.value.meta.id;
       expect(id).toMatch(/^id__[a-zA-Z0-9]{6}$/);
-      expect(captureResult.value.meta.used).toBe(0);
 
       const listResult = await service.list();
       expect(listResult.isOk()).toBe(true);
@@ -77,19 +76,17 @@ describe("integration tests", () => {
       expect(listResult.value).toHaveLength(1);
       expect(listResult.value[0]!.id).toBe(id);
       expect(listResult.value[0]!.title).toBe("Integration Test Entry");
-      expect(listResult.value[0]!.tags).toEqual(["topic__testing", "area__integration"]);
 
+      // read is pure — no side effects
       const readResult = await service.read(id);
       expect(readResult.isOk()).toBe(true);
       if (!readResult.isOk()) return;
 
-      expect(readResult.value.meta.used).toBe(1);
-      expect(readResult.value.body).toBe("This tests the full capture-list-read flow.");
+      expect(readResult.value.body).toContain("This tests the full capture-list-read flow.");
 
+      // reading again produces same result — no mutation
       const readResult2 = await service.read(id);
       expect(readResult2.isOk()).toBe(true);
-      if (!readResult2.isOk()) return;
-      expect(readResult2.value.meta.used).toBe(2);
     });
 
     it("persists entries to filesystem", async () => {
@@ -239,10 +236,6 @@ describe("integration tests", () => {
                   id,
                   title: entry.title,
                   tags: entry.tags,
-                  status: "captured",
-                  used: 0,
-                  last_used: new Date().toISOString(),
-                  pinned: false,
                   createdAt: now,
                   updatedAt: now,
                 },
@@ -357,10 +350,6 @@ describe("integration tests", () => {
             id: "id__abc123",
             title: "Hot Pattern",
             tags: ["topic__core"],
-            status: "promoted" as const,
-            used: 10,
-            last_used: "2024-01-20",
-            pinned: true,
             createdAt: now,
             updatedAt: now,
           },
@@ -374,10 +363,6 @@ describe("integration tests", () => {
             id: "id__def456",
             title: "Warm Tip",
             tags: ["topic__tips"],
-            status: "consolidated" as const,
-            used: 3,
-            last_used: "2024-01-15",
-            pinned: false,
             createdAt: now,
             updatedAt: now,
           },
@@ -457,7 +442,6 @@ Some existing content without memory section.`;
         title: "Important Pattern",
         body: "Use ResultAsync for all async operations.",
         tags: ["topic__patterns"],
-        pinned: true,
       });
 
       await service.capture({
@@ -470,29 +454,15 @@ Some existing content without memory section.`;
       expect(listResult.isOk()).toBe(true);
       if (!listResult.isOk()) return;
 
-      const hotIds = listResult.value.filter((e) => e.pinned || e.used > 5).map((e) => e.id);
-      const warmIds = listResult.value.filter((e) => !hotIds.includes(e.id)).map((e) => e.id);
+      // all entries as warm (hot tier determined by defrag agent)
+      const warmEntries = listResult.value.map((meta) => ({
+        meta,
+        path: `${rootDir}/topics/${meta.id}.md`,
+      }));
 
-      const hotWithBody = await Promise.all(
-        listResult.value
-          .filter((e) => hotIds.includes(e.id))
-          .map(async (meta) => {
-            const result = await adapter.read(meta.id);
-            return result.isOk() ? { meta, body: result.value.body } : null;
-          }),
-      );
-
-      const hotEntries = hotWithBody.filter((e): e is NonNullable<typeof e> => e !== null);
-      const warmEntries = listResult.value
-        .filter((e) => warmIds.includes(e.id))
-        .map((meta) => ({
-          meta,
-          path: `${rootDir}/topics/${meta.id}.md`,
-        }));
-
-      const section = generateAgentsMdSection(hotEntries, warmEntries);
+      const section = generateAgentsMdSection([], warmEntries);
       expect(section).toContain("Important Pattern");
-      expect(section).toContain("Use ResultAsync");
+      expect(section).toContain("Secondary Tip");
     });
   });
 
@@ -505,10 +475,6 @@ Some existing content without memory section.`;
           id: id1,
           title: "old title",
           tags: ["topic__auth"],
-          status: "captured",
-          used: 5,
-          last_used: "2024-01-15",
-          pinned: false,
           createdAt: Date.now(),
           updatedAt: Date.now(),
         },
@@ -521,10 +487,6 @@ Some existing content without memory section.`;
           title: "old title",
           body: "some content about auth",
           tags: ["topic__auth"],
-          used: 5,
-          last_used: "2024-01-15",
-          pinned: false,
-          status: "captured",
         },
       ];
 
@@ -600,20 +562,12 @@ Some existing content without memory section.`;
           title: "hot entry",
           body: "important",
           tags: [],
-          used: 10,
-          last_used: "2024-01-20",
-          pinned: true,
-          status: "captured",
         },
         {
           id: id2,
           title: "warm entry",
           body: "useful",
           tags: [],
-          used: 3,
-          last_used: "2024-01-15",
-          pinned: false,
-          status: "captured",
         },
       ];
 
@@ -742,10 +696,6 @@ Some existing content without memory section.`;
                   id,
                   title: entry.title,
                   tags: entry.tags,
-                  status: "captured",
-                  used: 0,
-                  last_used: new Date().toISOString(),
-                  pinned: false,
                   createdAt: now,
                   updatedAt: now,
                 },

@@ -68,6 +68,10 @@ function createTestProviders(overrides: {
   };
 }
 
+function entry(id: string, title: string, body: string, tags: string[] = []): EntryForDefrag {
+  return { id, title, body, tags };
+}
+
 describe("defrag machine", () => {
   it("completes immediately when no entries exist", async () => {
     const { providers } = createTestProviders({ entries: [] });
@@ -81,16 +85,7 @@ describe("defrag machine", () => {
 
   it("runs full pipeline: scanEntries → runAgent → parseOutput → applyChanges → generateAgentsMd → commitChanges → completed", async () => {
     const entries: EntryForDefrag[] = [
-      {
-        id: "id__001",
-        title: "auth note",
-        body: "use raw body for HMAC",
-        tags: ["auth"],
-        used: 5,
-        last_used: "2024-01-15",
-        pinned: false,
-        status: "promoted",
-      },
+      entry("id__001", "auth note", "use raw body for HMAC", ["auth"]),
     ];
     const agentOutput = JSON.stringify({
       actions: [{ type: "rename", id: "id__001", newTitle: "HMAC requires raw body" }],
@@ -111,16 +106,7 @@ describe("defrag machine", () => {
 
   it("completes when agent returns empty actions (no changes needed)", async () => {
     const entries: EntryForDefrag[] = [
-      {
-        id: "id__001",
-        title: "good note",
-        body: "already organized",
-        tags: ["topic"],
-        used: 3,
-        last_used: "2024-01-15",
-        pinned: false,
-        status: "promoted",
-      },
+      entry("id__001", "good note", "already organized", ["topic"]),
     ];
 
     const { providers } = createTestProviders({ entries, agentOutput: JSON.stringify({ actions: [], hotTier: ["id__001"], warmTier: [] }) });
@@ -145,20 +131,7 @@ describe("defrag machine", () => {
   });
 
   it("transitions to failed when runAgent errors", async () => {
-    const entries: EntryForDefrag[] = [
-      {
-        id: "id__001",
-        title: "test",
-        body: "content",
-        tags: [],
-        used: 1,
-        last_used: "2024-01-15",
-        pinned: false,
-        status: "promoted",
-      },
-    ];
-
-    const { providers } = createTestProviders({ entries, agentError: true });
+    const { providers } = createTestProviders({ entries: [entry("id__001", "test", "content")], agentError: true });
     const provided = defragMachine.provide(providers);
     const actor = createActor(provided, { input: {} });
 
@@ -169,25 +142,13 @@ describe("defrag machine", () => {
   });
 
   it("transitions to failed when applyChanges errors", async () => {
-    const entries: EntryForDefrag[] = [
-      {
-        id: "id__001",
-        title: "test",
-        body: "content",
-        tags: [],
-        used: 1,
-        last_used: "2024-01-15",
-        pinned: false,
-        status: "promoted",
-      },
-    ];
     const agentOutput = JSON.stringify({
       actions: [{ type: "archive", id: "id__001", reason: "outdated" }],
       hotTier: [],
       warmTier: [],
     });
 
-    const { providers } = createTestProviders({ entries, agentOutput, applyError: true });
+    const { providers } = createTestProviders({ entries: [entry("id__001", "test", "content")], agentOutput, applyError: true });
     const provided = defragMachine.provide(providers);
     const actor = createActor(provided, { input: {} });
 
@@ -198,20 +159,7 @@ describe("defrag machine", () => {
   });
 
   it("transitions to failed on malformed agent output", async () => {
-    const entries: EntryForDefrag[] = [
-      {
-        id: "id__001",
-        title: "test",
-        body: "content",
-        tags: [],
-        used: 1,
-        last_used: "2024-01-15",
-        pinned: false,
-        status: "promoted",
-      },
-    ];
-
-    const { providers } = createTestProviders({ entries, agentOutput: "not valid json" });
+    const { providers } = createTestProviders({ entries: [entry("id__001", "test", "content")], agentOutput: "not valid json" });
     const provided = defragMachine.provide(providers);
     const actor = createActor(provided, { input: {} });
 
@@ -223,26 +171,8 @@ describe("defrag machine", () => {
 
   it("propagates hotTier and warmTier to generateAgentsMd", async () => {
     const entries: EntryForDefrag[] = [
-      {
-        id: "id__001",
-        title: "hot entry",
-        body: "frequently used",
-        tags: ["core"],
-        used: 10,
-        last_used: "2024-01-20",
-        pinned: true,
-        status: "promoted",
-      },
-      {
-        id: "id__002",
-        title: "warm entry",
-        body: "sometimes used",
-        tags: ["utils"],
-        used: 3,
-        last_used: "2024-01-10",
-        pinned: false,
-        status: "promoted",
-      },
+      entry("id__001", "hot entry", "frequently used", ["core"]),
+      entry("id__002", "warm entry", "sometimes used", ["utils"]),
     ];
     const agentOutput = JSON.stringify({
       actions: [],
@@ -265,20 +195,7 @@ describe("defrag machine", () => {
   });
 
   it("transitions to failed when generateAgentsMd errors", async () => {
-    const entries: EntryForDefrag[] = [
-      {
-        id: "id__001",
-        title: "test",
-        body: "content",
-        tags: [],
-        used: 1,
-        last_used: "2024-01-15",
-        pinned: false,
-        status: "promoted",
-      },
-    ];
-
-    const { providers } = createTestProviders({ entries, generateError: true });
+    const { providers } = createTestProviders({ entries: [entry("id__001", "test", "content")], generateError: true });
     const provided = defragMachine.provide(providers);
     const actor = createActor(provided, { input: {} });
 
@@ -288,20 +205,7 @@ describe("defrag machine", () => {
   });
 
   it("transitions to failed when commitChanges errors", async () => {
-    const entries: EntryForDefrag[] = [
-      {
-        id: "id__001",
-        title: "test",
-        body: "content",
-        tags: [],
-        used: 1,
-        last_used: "2024-01-15",
-        pinned: false,
-        status: "promoted",
-      },
-    ];
-
-    const { providers } = createTestProviders({ entries, commitError: true });
+    const { providers } = createTestProviders({ entries: [entry("id__001", "test", "content")], commitError: true });
     const provided = defragMachine.provide(providers);
     const actor = createActor(provided, { input: {} });
 
@@ -312,9 +216,9 @@ describe("defrag machine", () => {
 
   it("handles multiple actions in agent output", async () => {
     const entries: EntryForDefrag[] = [
-      { id: "id__001", title: "a", body: "content a", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "promoted" },
-      { id: "id__002", title: "b", body: "content b", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "promoted" },
-      { id: "id__003", title: "c", body: "content c", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "promoted" },
+      entry("id__001", "a", "content a"),
+      entry("id__002", "b", "content b"),
+      entry("id__003", "c", "content c"),
     ];
     const agentOutput = JSON.stringify({
       actions: [
@@ -338,8 +242,8 @@ describe("defrag machine", () => {
 
   it("handles merge action from agent", async () => {
     const entries: EntryForDefrag[] = [
-      { id: "id__001", title: "auth a", body: "content a", tags: ["auth"], used: 2, last_used: "2024-01-15", pinned: false, status: "promoted" },
-      { id: "id__002", title: "auth b", body: "content b", tags: ["auth"], used: 3, last_used: "2024-01-16", pinned: false, status: "promoted" },
+      entry("id__001", "auth a", "content a", ["auth"]),
+      entry("id__002", "auth b", "content b", ["auth"]),
     ];
     const agentOutput = JSON.stringify({
       actions: [
@@ -360,9 +264,6 @@ describe("defrag machine", () => {
   });
 
   it("handles split action from agent", async () => {
-    const entries: EntryForDefrag[] = [
-      { id: "id__big", title: "large note", body: "very long content...", tags: [], used: 5, last_used: "2024-01-15", pinned: false, status: "promoted" },
-    ];
     const agentOutput = JSON.stringify({
       actions: [
         {
@@ -378,7 +279,7 @@ describe("defrag machine", () => {
       warmTier: [],
     });
 
-    const { providers } = createTestProviders({ entries, agentOutput });
+    const { providers } = createTestProviders({ entries: [entry("id__big", "large note", "very long content...")], agentOutput });
     const provided = defragMachine.provide(providers);
     const actor = createActor(provided, { input: {} });
 
@@ -390,16 +291,13 @@ describe("defrag machine", () => {
 
   describe("WORKFLOW = DATA: snapshot serialization", () => {
     it("context is JSON-serializable (no functions)", async () => {
-      const entries: EntryForDefrag[] = [
-        { id: "id__001", title: "test", body: "content", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "promoted" },
-      ];
       const agentOutput = JSON.stringify({
         actions: [{ type: "rename", id: "id__001", newTitle: "renamed" }],
         hotTier: ["id__001"],
         warmTier: [],
       });
 
-      const { providers } = createTestProviders({ entries, agentOutput });
+      const { providers } = createTestProviders({ entries: [entry("id__001", "test", "content")], agentOutput });
       const provided = defragMachine.provide(providers);
       const actor = createActor(provided, { input: {} });
 
@@ -414,16 +312,13 @@ describe("defrag machine", () => {
     });
 
     it("can restore from snapshot with fresh provide()", async () => {
-      const entries: EntryForDefrag[] = [
-        { id: "id__001", title: "test", body: "content", tags: [], used: 1, last_used: "2024-01-15", pinned: false, status: "promoted" },
-      ];
       const agentOutput = JSON.stringify({
         actions: [{ type: "rename", id: "id__001", newTitle: "renamed" }],
         hotTier: ["id__001"],
         warmTier: [],
       });
 
-      const { providers } = createTestProviders({ entries, agentOutput });
+      const { providers } = createTestProviders({ entries: [entry("id__001", "test", "content")], agentOutput });
       const provided = defragMachine.provide(providers);
       const actor = createActor(provided, { input: {} });
 

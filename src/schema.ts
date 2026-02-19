@@ -1,11 +1,14 @@
 /**
  * schemas for journal queue and memory entries.
  * journal queue: harness-agnostic entry format for adapters.
- * memory entry: tiered knowledge base with usage tracking (gilfoyle pattern).
+ * memory entry: pure markdown with derived metadata (notes-and-links model).
+ *
+ * WHY no stored metadata: entries are plain markdown files. id from filename,
+ * title from # heading, tags from #tag in body, timestamps from git history.
+ * nothing is written to disk as metadata — all fields are derived at read time.
  */
 
 import { type } from "arktype";
-import { ID_PATTERN } from "./id.js";
 
 export const JournalQueueEntrySchema = type({
   version: '"1"',
@@ -37,23 +40,25 @@ const MemorySourcesSchema = type({
   "cwd?": "string",
 });
 
-const SAFE_ORG_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
+export type MemorySources = typeof MemorySourcesSchema.infer;
 
-export const MemoryEntryMetaSchema = type({
-  id: type("string").matching(ID_PATTERN),
-  title: "string >= 1",
-  "tags?": "string[]",
-  status: "'captured' | 'consolidated' | 'promoted'",
-  used: "number >= 0",
-  last_used: "string",
-  pinned: "boolean",
-  createdAt: "number",
-  updatedAt: "number",
-  "sources?": MemorySourcesSchema,
-  "org?": type("string").matching(SAFE_ORG_PATTERN),
-});
-
-export type MemoryEntryMeta = typeof MemoryEntryMetaSchema.infer;
+/**
+ * runtime memory entry metadata — all fields derived at read time.
+ * id: from filename (id__XXXXXX pattern).
+ * title: from # heading in body.
+ * tags: from #tag syntax in body.
+ * createdAt/updatedAt: from git history (fallback to Date.now() for uncommitted).
+ * sources/org: optional, passed at capture time and stored inline.
+ */
+export interface MemoryEntryMeta {
+  id: string;
+  title: string;
+  tags: string[];
+  createdAt: number;
+  updatedAt: number;
+  sources?: MemorySources;
+  org?: string;
+}
 
 export interface MemoryEntry {
   meta: MemoryEntryMeta;
