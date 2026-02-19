@@ -35,44 +35,48 @@ export async function checkHealth(rootDir: string): Promise<HealthCheckResult> {
     };
   }
 
-  const topicsDir = join(rootDir, "topics");
-  const archiveDir = join(rootDir, "archive");
-  const inboxDir = join(rootDir, "inbox");
+  const orgsDir = join(rootDir, "orgs");
 
-  for (const dir of [topicsDir, archiveDir]) {
-    if (!existsSync(dir)) continue;
+  if (existsSync(orgsDir)) {
+    for (const org of readdirSync(orgsDir, { withFileTypes: true })) {
+      if (!org.isDirectory()) continue;
 
-    for (const file of readdirSync(dir)) {
-      if (!file.endsWith(".md")) continue;
+      const archiveDir = join(orgsDir, org.name, "archive");
+      if (existsSync(archiveDir)) {
+        for (const file of readdirSync(archiveDir)) {
+          if (!file.endsWith(".md")) continue;
 
-      const idMatch = file.match(/(id__[A-Za-z0-9]{6})/);
-      if (!idMatch) {
-        issues.push({
-          severity: "warning",
-          message: `file missing id in filename: ${file}`,
-          location: dir,
-        });
-        continue;
+          const idMatch = file.match(/(id__[A-Za-z0-9]{6})/);
+          if (!idMatch) {
+            issues.push({
+              severity: "warning",
+              message: `file missing id in filename: ${file}`,
+              location: archiveDir,
+            });
+            continue;
+          }
+
+          const id = idMatch[1];
+          if (id && !isValidId(id)) {
+            issues.push({
+              severity: "error",
+              message: `invalid id format: ${id}`,
+              location: join(archiveDir, file),
+            });
+            continue;
+          }
+
+          totalEntries++;
+        }
       }
 
-      const id = idMatch[1];
-      if (id && !isValidId(id)) {
-        issues.push({
-          severity: "error",
-          message: `invalid id format: ${id}`,
-          location: join(dir, file),
-        });
-        continue;
-      }
-
-      totalEntries++;
-    }
-  }
-
-  if (existsSync(inboxDir)) {
-    for (const file of readdirSync(inboxDir)) {
-      if (file.endsWith(".json") && !file.startsWith(".")) {
-        pendingQueue++;
+      const inboxDir = join(orgsDir, org.name, "inbox");
+      if (existsSync(inboxDir)) {
+        for (const file of readdirSync(inboxDir)) {
+          if (file.endsWith(".json") && !file.startsWith(".")) {
+            pendingQueue++;
+          }
+        }
       }
     }
   }

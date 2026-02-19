@@ -35,7 +35,7 @@ export async function run(args: string[]) {
   console.log(`title: ${entry.meta.title}${tags}`);
   console.log(`status: ${entry.meta.status}`);
   console.log(`used: ${entry.meta.used}`);
-  console.log(`pinned: ${entry.meta.pinned}`);
+  console.log(`org: ${entry.meta.org}`);
   console.log(`created: ${new Date(entry.meta.createdAt).toISOString()}`);
   console.log(`---\n`);
   console.log(entry.body);

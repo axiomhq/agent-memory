@@ -46,8 +46,7 @@ export async function run(args: string[]) {
 
   for (const entry of result.value) {
     const tags = entry.tags?.length ? ` [${entry.tags.join(", ")}]` : "";
-    const pinned = entry.pinned ? " 📌" : "";
-    console.log(`${entry.id}: "${entry.title}"${tags}${pinned}`);
+    console.log(`${entry.id}: "${entry.title}"${tags}`);
     console.log(`  used: ${entry.used} | status: ${entry.status} | last: ${entry.last_used}`);
   }
 }

@@ -1,10 +1,14 @@
 /**
  * memory generate-agents-md — regenerate AGENTS.md standalone.
+ *
+ * reads top-of-mind status from filenames (not metadata).
  */
 
 import { parseArgs } from "util";
+import { readdirSync, existsSync } from "fs";
+import { join } from "path";
 import { loadConfig, expandPath } from "../config.js";
-import { createFileMemoryPersistenceAdapter } from "../persist/filesystem.js";
+import { createFileMemoryPersistenceAdapter, isTopOfMindFilename } from "../persist/filesystem.js";
 import { replaceAgentsMdSection, generateAgentsMdSection } from "../agents-md/generator.js";
 
 export async function run(args: string[]) {
@@ -28,27 +32,36 @@ export async function run(args: string[]) {
   }
 
   const entries = listResult.value;
-  const hotIds = entries.filter((e) => e.pinned || e.used > 5).map((e) => e.id);
-  const warmIds = entries.filter((e) => !hotIds.includes(e.id)).map((e) => e.id);
 
-  const hotWithBody = await Promise.all(
+  const topOfMindIds = new Set<string>();
+  const orgsDir = join(rootDir, "orgs");
+  if (existsSync(orgsDir)) {
+    for (const org of readdirSync(orgsDir, { withFileTypes: true })) {
+      if (!org.isDirectory()) continue;
+      const archiveDir = join(orgsDir, org.name, "archive");
+      if (!existsSync(archiveDir)) continue;
+      for (const file of readdirSync(archiveDir)) {
+        if (isTopOfMindFilename(file)) {
+          const match = file.match(/(id__[a-zA-Z0-9]{6})/);
+          if (match) topOfMindIds.add(match[1]!);
+        }
+      }
+    }
+  }
+
+  const topOfMindWithBody = await Promise.all(
     entries
-      .filter((e) => hotIds.includes(e.id))
+      .filter((e) => topOfMindIds.has(e.id))
       .map(async (meta) => {
         const result = await adapter.read(meta.id);
         return result.isOk() ? { meta, body: result.value.body } : null;
       }),
   );
 
-  const hotEntries = hotWithBody.filter((e): e is NonNullable<typeof e> => e !== null);
-  const warmEntries = entries
-    .filter((e) => warmIds.includes(e.id))
-    .map((meta) => ({
-      meta,
-      path: `${rootDir}/topics/${meta.id}.md`,
-    }));
+  const hotEntries = topOfMindWithBody.filter((e): e is NonNullable<typeof e> => e !== null);
+  const archiveEntries = entries.filter((e) => !topOfMindIds.has(e.id));
 
-  const section = generateAgentsMdSection(hotEntries, warmEntries);
+  const section = generateAgentsMdSection(hotEntries, archiveEntries);
 
   const targets = values.target ? [values.target] : config.agentsMd.targets;
 

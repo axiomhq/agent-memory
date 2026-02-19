@@ -1,13 +1,15 @@
 /**
- * memory defrag — run defrag machine, regenerate AGENTS.md.
+ * memory defrag — run defrag, update top-of-mind filenames, regenerate AGENTS.md.
  */
 
+import { join } from "path";
+import { readdirSync } from "fs";
 import { loadConfig, expandPath } from "../config.js";
-import { createFileMemoryPersistenceAdapter } from "../persist/filesystem.js";
+import { createFileMemoryPersistenceAdapter, isTopOfMindFilename, setTopOfMind } from "../persist/filesystem.js";
 import { createMemoryService } from "../service.js";
 import { buildDefragPrompt, parseDefragOutput, type EntryForDefrag } from "../prompts/defrag.js";
 import { executeShellLLM } from "../adapters/shell.js";
-import { replaceAgentsMdSection, generateAgentsMdSection, assignTiers } from "../agents-md/generator.js";
+import { replaceAgentsMdSection, generateAgentsMdSection } from "../agents-md/generator.js";
 
 export async function run(_args: string[]) {
   const config = loadConfig();
@@ -38,7 +40,7 @@ export async function run(_args: string[]) {
         tags: meta.tags ?? [],
         used: meta.used,
         last_used: meta.last_used,
-        pinned: meta.pinned,
+        topOfMind: false, // will be determined from filename in a real scan
         status: meta.status,
       });
     }
@@ -51,25 +53,27 @@ export async function run(_args: string[]) {
 
   console.log(`defrag complete:`);
   console.log(`  actions: ${decision.actions.length}`);
-  console.log(`  hot tier: ${decision.hotTier.length}`);
-  console.log(`  warm tier: ${decision.warmTier.length}`);
+  console.log(`  top-of-mind: ${decision.topOfMind.length}`);
 
-  const tiered = assignTiers(listResult.value, decision.hotTier, decision.warmTier);
+  const topOfMindSet = new Set(decision.topOfMind);
 
-  const hotWithBody = await Promise.all(
-    tiered.hot.map(async (meta) => {
-      const result = await adapter.read(meta.id);
-      return result.isOk() ? { meta, body: result.value.body } : null;
-    }),
+  for (const entry of entries) {
+    setTopOfMind(rootDir, entry.id, topOfMindSet.has(entry.id));
+  }
+
+  const topOfMindEntries = await Promise.all(
+    entries
+      .filter((e) => topOfMindSet.has(e.id))
+      .map(async (e) => {
+        const result = await adapter.read(e.id);
+        return result.isOk() ? { meta: result.value.meta, body: result.value.body } : null;
+      }),
   );
 
-  const hotEntries = hotWithBody.filter((e): e is NonNullable<typeof e> => e !== null);
-  const warmEntries = tiered.warm.map((meta) => ({
-    meta,
-    path: `${rootDir}/topics/${meta.id}.md`,
-  }));
+  const hotEntries = topOfMindEntries.filter((e): e is NonNullable<typeof e> => e !== null);
+  const archiveEntries = listResult.value.filter((e) => !topOfMindSet.has(e.id));
 
-  const section = generateAgentsMdSection(hotEntries, warmEntries);
+  const section = generateAgentsMdSection(hotEntries, archiveEntries);
 
   for (const target of config.agentsMd.targets) {
     const targetPath = expandPath(target);
