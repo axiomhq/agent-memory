@@ -12,6 +12,7 @@ import { buildDefragPrompt, parseDefragOutput, type EntryForDefrag } from "../pr
 import { executeShellLLM } from "../adapters/shell.js";
 import { replaceAgentsMdSection, generateAgentsMdSection } from "../agents-md/generator.js";
 import type { EntryWithBody } from "../agents-md/generator.js";
+import { buildIndexNote } from "../index-note.js";
 
 export async function run(args: string[]) {
   const { values } = parseArgs({
@@ -77,6 +78,16 @@ export async function run(args: string[]) {
     }));
 
   const allEntries = listResult.value;
+
+  // persist index note to archive so top-of-mind lives in the graph
+  const indexNote = buildIndexNote(
+    entries.filter((e) => topOfMindSet.has(e.id)).map((e) => ({ id: e.id, title: e.title })),
+  );
+  indexNote.meta.org = org;
+  const writeResult = await adapter.write(indexNote);
+  if (writeResult.isErr()) {
+    console.error(`warning: failed to write index note: ${writeResult.error.message}`);
+  }
 
   const section = generateAgentsMdSection(topOfMindEntries, allEntries);
 
