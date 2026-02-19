@@ -14,8 +14,12 @@
     "./adapters": "./src/adapters/index.ts",
     "./adapters/amp": "./src/adapters/amp.ts",
     "./prompts/consolidate": "./src/prompts/consolidate.ts",
+    "./machines/defrag": "./src/machines/defrag.ts",
+    "./prompts/defrag": "./src/prompts/defrag.ts",
+    "./agents-md/generator": "./src/agents-md/generator.ts",
     "./tags": "./src/tags.ts",
-    "./links": "./src/links.ts"
+    "./links": "./src/links.ts",
+    "./index-note": "./src/index-note.ts"
   },
   "bin": {
     "memory": "./src/cli/index.ts"
