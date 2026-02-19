@@ -3,7 +3,6 @@ import { mkdirSync, rmSync, existsSync, writeFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { serializeMemoryMarkdown } from "../src/format.js";
-import type { MemoryEntryMeta } from "../src/schema.js";
 
 let currentTestDir: string;
 
@@ -11,28 +10,15 @@ function createEntry(
   id: string,
   title: string,
   options: {
-    status?: MemoryEntryMeta["status"];
     tags?: string[];
-    pinned?: boolean;
-    used?: number;
   } = {},
 ): void {
-  const now = Date.now();
-  const meta: MemoryEntryMeta = {
-    id,
-    title,
-    status: options.status ?? "captured",
-    used: options.used ?? 0,
-    last_used: new Date().toISOString(),
-    pinned: options.pinned ?? false,
-    createdAt: now,
-    updatedAt: now,
-    ...(options.tags ? { tags: options.tags } : {}),
-  };
+  const tags = options.tags ?? [];
+  const body = "test body content";
+  const content = serializeMemoryMarkdown(title, tags, body);
 
   const filename = `${title.toLowerCase().replace(/\s+/g, "-")} ${id}.md`;
-  const filepath = join(currentTestDir, "topics", filename);
-  const content = serializeMemoryMarkdown(meta, "test body content");
+  const filepath = join(currentTestDir, "orgs", "default", "archive", filename);
   writeFileSync(filepath, content);
 }
 
@@ -45,7 +31,6 @@ mock.module("../src/config.js", () => ({
     storage: { root: getTestDir(), autoCommit: true, commitHook: "" },
     llm: { command: "", presets: {} },
     schedule: { consolidateIntervalHours: 2, defragIntervalHours: 24 },
-    agentsMd: { targets: [] },
   }),
   expandPath: (p: string) => p,
 }));
@@ -57,7 +42,7 @@ describe("cli list", () => {
 
   beforeEach(async () => {
     currentTestDir = join(tmpdir(), `agent-memory-cli-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    mkdirSync(join(currentTestDir, "topics"), { recursive: true });
+    mkdirSync(join(currentTestDir, "orgs", "default", "archive"), { recursive: true });
 
     consoleLogSpy = spyOn(console, "log").mockImplementation(() => {});
     consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
@@ -85,7 +70,7 @@ describe("cli list", () => {
 
   test("lists entries with metadata", async () => {
     createEntry("id__abc123", "Test Entry One", { tags: ["topic__xstate"] });
-    createEntry("id__def456", "Test Entry Two", { pinned: true });
+    createEntry("id__def456", "Test Entry Two");
 
     const { run } = await import("../src/cli/list.js");
     await run([]);
@@ -99,20 +84,6 @@ describe("cli list", () => {
     expect(output).toContain("Test Entry One");
     expect(output).toContain("Test Entry Two");
     expect(output).toContain("[topic__xstate]");
-    expect(output).toContain("📌");
-  });
-
-  test("filters by --status flag", async () => {
-    createEntry("id__aaa111", "Captured Entry", { status: "captured" });
-    createEntry("id__bbb222", "Consolidated Entry", { status: "consolidated" });
-
-    const { run } = await import("../src/cli/list.js");
-    await run(["--status", "consolidated"]);
-
-    const output = consoleLogSpy.mock.calls.flat().join("\n");
-    expect(output).toContain("found 1 entries");
-    expect(output).toContain("Consolidated Entry");
-    expect(output).not.toContain("Captured Entry");
   });
 
   test("filters by --query flag", async () => {
@@ -136,8 +107,8 @@ describe("cli list", () => {
       createEntry(validIds[i]!, `Entry ${i}`);
     }
 
-    const topicsDir = join(currentTestDir, "topics");
-    const files = readdirSync(topicsDir);
+    const archiveDir = join(currentTestDir, "orgs", "default", "archive");
+    const files = readdirSync(archiveDir);
     expect(files.length).toBe(5);
 
     const config = (await import("../src/config.js"));

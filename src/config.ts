@@ -24,15 +24,10 @@ const ScheduleSchema = type({
   "defragIntervalHours?": "number >= 1",
 });
 
-const AgentsMdSchema = type({
-  "targets?": "string[]",
-});
-
 const ConfigSchema = type({
   "storage?": StorageSchema,
   "llm?": LlmSchema,
   "schedule?": ScheduleSchema,
-  "agentsMd?": AgentsMdSchema,
 });
 
 export type Config = typeof ConfigSchema.infer;
@@ -53,15 +48,10 @@ export interface ResolvedSchedule {
   defragIntervalHours: number;
 }
 
-export interface ResolvedAgentsMd {
-  targets: string[];
-}
-
 export interface ResolvedConfig {
   storage: ResolvedStorage;
   llm: ResolvedLlm;
   schedule: ResolvedSchedule;
-  agentsMd: ResolvedAgentsMd;
 }
 
 const DEFAULT_MEMORY_ROOT = join(homedir(), "commonplace", "01_files", "_utilities", "agent-memories");
@@ -82,9 +72,6 @@ export const DEFAULT_CONFIG: ResolvedConfig = {
   schedule: {
     consolidateIntervalHours: 2,
     defragIntervalHours: 24,
-  },
-  agentsMd: {
-    targets: [join(homedir(), ".config", "amp", "AGENTS.md")],
   },
 };
 
@@ -127,9 +114,6 @@ export function loadConfig(): ResolvedConfig {
       schedule: {
         consolidateIntervalHours: validated.schedule?.consolidateIntervalHours ?? DEFAULT_CONFIG.schedule.consolidateIntervalHours,
         defragIntervalHours: validated.schedule?.defragIntervalHours ?? DEFAULT_CONFIG.schedule.defragIntervalHours,
-      },
-      agentsMd: {
-        targets: validated.agentsMd?.targets ?? DEFAULT_CONFIG.agentsMd.targets,
       },
     };
   } catch (e) {

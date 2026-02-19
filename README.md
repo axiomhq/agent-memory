@@ -68,8 +68,8 @@ bun run src/cli/index.ts consolidate
 # run defrag
 bun run src/cli/index.ts defrag
 
-# generate AGENTS.md
-bun run src/cli/index.ts generate-agents-md --target ~/.config/amp/AGENTS.md
+# generate output-agents.md for an org
+bun run src/cli/index.ts generate-agents-md --org default
 
 # health check
 bun run src/cli/index.ts doctor
@@ -120,10 +120,12 @@ key patterns:
 ├── inbox/                     # journal queue entries (JSON)
 │   ├── 2026-02-13T14-30_amp_abc123.json
 │   └── .processed/            # consumed entries
-├── topics/                    # organized knowledge base (markdown)
-│   ├── xstate-guard-patterns -- topic__xstate id__a1b2c3.md
-│   └── neverthrow-error-tags -- topic__neverthrow id__c3d4e5.md
-└── archive/                   # demoted/superseded entries
+└── orgs/
+    └── {org}/
+        ├── archive/           # memory entries (markdown)
+        │   ├── xstate-guard-patterns id__a1b2c3.md
+        │   └── neverthrow-error-tags id__c3d4e5.md
+        └── output-agents.md   # generated memory section
 ```
 
 ## cross-linking
@@ -142,9 +144,6 @@ zero-config by default. optionally create `memory.config.json`:
   },
   "llm": {
     "command": "amp agent run"
-  },
-  "agentsMd": {
-    "targets": ["~/.config/amp/AGENTS.md"]
   }
 }
 ```

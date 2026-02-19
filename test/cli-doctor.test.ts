@@ -6,14 +6,12 @@ import { checkHealth } from "../src/cli/doctor.js";
 
 describe("cli doctor", () => {
   let testDir: string;
-  let topicsDir: string;
   let archiveDir: string;
   let inboxDir: string;
 
   beforeEach(() => {
     testDir = join(tmpdir(), `agent-memory-doctor-test-${Date.now()}`);
-    topicsDir = join(testDir, "topics");
-    archiveDir = join(testDir, "archive");
+    archiveDir = join(testDir, "orgs", "default", "archive");
     inboxDir = join(testDir, "inbox");
   });
 
@@ -45,10 +43,10 @@ describe("cli doctor", () => {
     });
 
     test("counts entries with valid id in filename", async () => {
-      mkdirSync(topicsDir, { recursive: true });
+      mkdirSync(archiveDir, { recursive: true });
 
       writeFileSync(
-        join(topicsDir, "some-topic -- tag__x id__ABC123.md"),
+        join(archiveDir, "some-topic -- tag__x id__ABC123.md"),
         "---\nmeta:\n  id: id__ABC123\n---\ncontent"
       );
 
@@ -60,10 +58,10 @@ describe("cli doctor", () => {
     });
 
     test("detects file missing id in filename (warning)", async () => {
-      mkdirSync(topicsDir, { recursive: true });
+      mkdirSync(archiveDir, { recursive: true });
 
       writeFileSync(
-        join(topicsDir, "some-topic -- tag__x.md"),
+        join(archiveDir, "some-topic -- tag__x.md"),
         "---\nmeta:\n  id: id__ABC123\n---\ncontent"
       );
 
@@ -75,10 +73,10 @@ describe("cli doctor", () => {
     });
 
     test("detects invalid id format in filename (error)", async () => {
-      mkdirSync(topicsDir, { recursive: true });
+      mkdirSync(archiveDir, { recursive: true });
 
       writeFileSync(
-        join(topicsDir, "topic -- tag__x id__ABC0EF.md"),
+        join(archiveDir, "topic -- tag__x id__ABC0EF.md"),
         "---\nmeta:\n  id: id__ABC0EF\n---\ncontent"
       );
 
@@ -90,10 +88,10 @@ describe("cli doctor", () => {
     });
 
     test("valid id format uses base58 characters", async () => {
-      mkdirSync(topicsDir, { recursive: true });
+      mkdirSync(archiveDir, { recursive: true });
 
       writeFileSync(
-        join(topicsDir, "topic id__123abc.md"),
+        join(archiveDir, "topic id__123abc.md"),
         "---\nmeta:\n  id: id__123abc\n---\ncontent"
       );
 
@@ -105,10 +103,10 @@ describe("cli doctor", () => {
     });
 
     test("id with zero character is invalid (not in base58)", async () => {
-      mkdirSync(topicsDir, { recursive: true });
+      mkdirSync(archiveDir, { recursive: true });
 
       writeFileSync(
-        join(topicsDir, "topic id__abc012.md"),
+        join(archiveDir, "topic id__abc012.md"),
         "---\nmeta:\n  id: id__abc012\n---\ncontent"
       );
 
@@ -119,10 +117,10 @@ describe("cli doctor", () => {
     });
 
     test("id with capital O is invalid (not in base58)", async () => {
-      mkdirSync(topicsDir, { recursive: true });
+      mkdirSync(archiveDir, { recursive: true });
 
       writeFileSync(
-        join(topicsDir, "topic id__ABCOEF.md"),
+        join(archiveDir, "topic id__ABCOEF.md"),
         "---\nmeta:\n  id: id__ABCOEF\n---\ncontent"
       );
 
@@ -133,10 +131,10 @@ describe("cli doctor", () => {
     });
 
     test("id with capital I is invalid (not in base58)", async () => {
-      mkdirSync(topicsDir, { recursive: true });
+      mkdirSync(archiveDir, { recursive: true });
 
       writeFileSync(
-        join(topicsDir, "topic id__ABCIEF.md"),
+        join(archiveDir, "topic id__ABCIEF.md"),
         "---\nmeta:\n  id: id__ABCIEF\n---\ncontent"
       );
 
@@ -146,10 +144,10 @@ describe("cli doctor", () => {
     });
 
     test("id with lowercase l is invalid (not in base58)", async () => {
-      mkdirSync(topicsDir, { recursive: true });
+      mkdirSync(archiveDir, { recursive: true });
 
       writeFileSync(
-        join(topicsDir, "topic id__abcdel.md"),
+        join(archiveDir, "topic id__abcdel.md"),
         "---\nmeta:\n  id: id__abcdel\n---\ncontent"
       );
 
@@ -158,13 +156,14 @@ describe("cli doctor", () => {
       expect(result.errors).toHaveLength(1);
     });
 
-    test("counts entries from both topics and archive", async () => {
-      mkdirSync(topicsDir, { recursive: true });
+    test("counts entries across orgs", async () => {
       mkdirSync(archiveDir, { recursive: true });
+      const otherArchive = join(testDir, "orgs", "acme", "archive");
+      mkdirSync(otherArchive, { recursive: true });
 
-      writeFileSync(join(topicsDir, "topic1 id__111aaa.md"), "content1");
-      writeFileSync(join(topicsDir, "topic2 id__222bbb.md"), "content2");
-      writeFileSync(join(archiveDir, "archived id__333ccc.md"), "content3");
+      writeFileSync(join(archiveDir, "topic1 id__111aaa.md"), "content1");
+      writeFileSync(join(archiveDir, "topic2 id__222bbb.md"), "content2");
+      writeFileSync(join(otherArchive, "archived id__333ccc.md"), "content3");
 
       const result = await checkHealth(testDir);
 
@@ -172,11 +171,11 @@ describe("cli doctor", () => {
     });
 
     test("ignores non-md files", async () => {
-      mkdirSync(topicsDir, { recursive: true });
+      mkdirSync(archiveDir, { recursive: true });
 
-      writeFileSync(join(topicsDir, "topic id__abc123.md"), "content");
-      writeFileSync(join(topicsDir, "readme.txt"), "text");
-      writeFileSync(join(topicsDir, "data.json"), "{}");
+      writeFileSync(join(archiveDir, "topic id__abc123.md"), "content");
+      writeFileSync(join(archiveDir, "readme.txt"), "text");
+      writeFileSync(join(archiveDir, "data.json"), "{}");
 
       const result = await checkHealth(testDir);
 
@@ -226,11 +225,11 @@ describe("cli doctor", () => {
     });
 
     test("multiple warnings and errors are all reported", async () => {
-      mkdirSync(topicsDir, { recursive: true });
+      mkdirSync(archiveDir, { recursive: true });
 
-      writeFileSync(join(topicsDir, "no-id-1.md"), "content");
-      writeFileSync(join(topicsDir, "no-id-2.md"), "content");
-      writeFileSync(join(topicsDir, "bad-id id__0OOO00.md"), "content");
+      writeFileSync(join(archiveDir, "no-id-1.md"), "content");
+      writeFileSync(join(archiveDir, "no-id-2.md"), "content");
+      writeFileSync(join(archiveDir, "bad-id id__0OOO00.md"), "content");
 
       const result = await checkHealth(testDir);
 
@@ -239,11 +238,10 @@ describe("cli doctor", () => {
     });
 
     test("healthy system returns all zeros", async () => {
-      mkdirSync(topicsDir, { recursive: true });
       mkdirSync(archiveDir, { recursive: true });
       mkdirSync(inboxDir, { recursive: true });
 
-      writeFileSync(join(topicsDir, "valid-entry -- tag__test id__abc123.md"), "content");
+      writeFileSync(join(archiveDir, "valid-entry -- tag__test id__abc123.md"), "content");
       writeFileSync(join(archiveDir, "archived-entry id__def456.md"), "content");
 
       const result = await checkHealth(testDir);

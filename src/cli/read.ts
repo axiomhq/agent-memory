@@ -1,5 +1,5 @@
 /**
- * memory read — read entry, increment used counter.
+ * memory read — read entry (pure read, no side effects).
  */
 
 import { loadConfig, expandPath } from "../config.js";
@@ -33,10 +33,6 @@ export async function run(args: string[]) {
   console.log(`---`);
   console.log(`id: ${entry.meta.id}`);
   console.log(`title: ${entry.meta.title}${tags}`);
-  console.log(`status: ${entry.meta.status}`);
-  console.log(`used: ${entry.meta.used}`);
-  console.log(`pinned: ${entry.meta.pinned}`);
-  console.log(`created: ${new Date(entry.meta.createdAt).toISOString()}`);
   console.log(`---\n`);
   console.log(entry.body);
 }

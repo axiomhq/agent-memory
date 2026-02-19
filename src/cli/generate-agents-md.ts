@@ -1,8 +1,10 @@
 /**
- * memory generate-agents-md — regenerate AGENTS.md standalone.
+ * memory generate-agents-md — regenerate output-agents.md per org standalone.
  */
 
+import { join } from "path";
 import { parseArgs } from "util";
+import { mkdirSync, existsSync } from "fs";
 import { loadConfig, expandPath } from "../config.js";
 import { createFileMemoryPersistenceAdapter } from "../persist/filesystem.js";
 import { replaceAgentsMdSection, generateAgentsMdSection } from "../agents-md/generator.js";
@@ -11,11 +13,12 @@ export async function run(args: string[]) {
   const { values } = parseArgs({
     args,
     options: {
-      target: { type: "string", short: "t" },
+      org: { type: "string", short: "o" },
     },
     strict: true,
   });
 
+  const org = values.org ?? "default";
   const config = loadConfig();
   const rootDir = expandPath(config.storage.root);
 
@@ -28,33 +31,15 @@ export async function run(args: string[]) {
   }
 
   const entries = listResult.value;
-  const hotIds = entries.filter((e) => e.pinned || e.used > 5).map((e) => e.id);
-  const warmIds = entries.filter((e) => !hotIds.includes(e.id)).map((e) => e.id);
 
-  const hotWithBody = await Promise.all(
-    entries
-      .filter((e) => hotIds.includes(e.id))
-      .map(async (meta) => {
-        const result = await adapter.read(meta.id);
-        return result.isOk() ? { meta, body: result.value.body } : null;
-      }),
-  );
+  // without defrag agent, no top-of-mind entries — all listed as links
+  const section = generateAgentsMdSection([], entries);
 
-  const hotEntries = hotWithBody.filter((e): e is NonNullable<typeof e> => e !== null);
-  const warmEntries = entries
-    .filter((e) => warmIds.includes(e.id))
-    .map((meta) => ({
-      meta,
-      path: `${rootDir}/topics/${meta.id}.md`,
-    }));
-
-  const section = generateAgentsMdSection(hotEntries, warmEntries);
-
-  const targets = values.target ? [values.target] : config.agentsMd.targets;
-
-  for (const target of targets) {
-    const targetPath = expandPath(target);
-    replaceAgentsMdSection(targetPath, section);
-    console.log(`updated: ${targetPath}`);
+  const targetDir = join(rootDir, "orgs", org);
+  if (!existsSync(targetDir)) {
+    mkdirSync(targetDir, { recursive: true });
   }
+  const targetPath = join(targetDir, "output-agents.md");
+  replaceAgentsMdSection(targetPath, section);
+  console.log(`updated: ${targetPath}`);
 }

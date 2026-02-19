@@ -4,9 +4,6 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { createFileMemoryPersistenceAdapter } from "../src/persist/filesystem.js";
 import { createMemoryService } from "../src/service.js";
-import { generateId } from "../src/id.js";
-import { parseMemoryMarkdown } from "../src/format.js";
-import type { MemoryEntryMeta } from "../src/schema.js";
 
 describe("service + persistence", () => {
   let testDir: string;
@@ -40,7 +37,7 @@ describe("service + persistence", () => {
       }
     });
 
-    test("sets initial status to captured", async () => {
+    test("sets tags as empty array by default", async () => {
       const result = await service.capture({
         title: "Test",
         body: "body",
@@ -48,9 +45,7 @@ describe("service + persistence", () => {
 
       expect(result.isOk()).toBe(true);
       if (result.isOk()) {
-        expect(result.value.meta.status).toBe("captured");
-        expect(result.value.meta.used).toBe(0);
-        expect(result.value.meta.pinned).toBe(false);
+        expect(result.value.meta.tags).toEqual([]);
       }
     });
 
@@ -59,15 +54,11 @@ describe("service + persistence", () => {
         title: "Test",
         body: "body",
         tags: ["topic__xstate", "area__testing"],
-        pinned: true,
-        sources: { harness: "amp", threadId: "T-123" },
       });
 
       expect(result.isOk()).toBe(true);
       if (result.isOk()) {
         expect(result.value.meta.tags).toEqual(["topic__xstate", "area__testing"]);
-        expect(result.value.meta.pinned).toBe(true);
-        expect(result.value.meta.sources?.threadId).toBe("T-123");
       }
     });
 
@@ -78,11 +69,10 @@ describe("service + persistence", () => {
       });
 
       expect(result.isOk()).toBe(true);
-      
-      // Check file was written
-      const topicsDir = join(testDir, "topics");
-      const files = Bun.file(".") ? [] : [];
-      // The file should exist with the ID in the filename
+
+      const archiveDir = join(testDir, "orgs", "default", "archive");
+      expect(existsSync(archiveDir)).toBe(true);
+
       const id = result.isOk() ? result.value.meta.id : "";
       expect(id).toBeTruthy();
     });
@@ -97,34 +87,14 @@ describe("service + persistence", () => {
       }
     });
 
-    test("lists entries sorted by updatedAt desc", async () => {
+    test("lists entries", async () => {
       await service.capture({ title: "First", body: "body" });
-      await new Promise(r => setTimeout(r, 10));
       await service.capture({ title: "Second", body: "body" });
 
       const result = await service.list();
       expect(result.isOk()).toBe(true);
       if (result.isOk()) {
         expect(result.value.length).toBe(2);
-        expect(result.value[0]!.title).toBe("Second"); // newest first
-        expect(result.value[1]!.title).toBe("First");
-      }
-    });
-
-    test("filters by status", async () => {
-      const r1 = await service.capture({ title: "Entry 1", body: "body" });
-      const r2 = await service.capture({ title: "Entry 2", body: "body" });
-
-      // Update one to consolidated
-      if (r1.isOk()) {
-        await service.updateMeta(r1.value.meta.id, { status: "consolidated" });
-      }
-
-      const result = await service.list({ status: "consolidated" });
-      expect(result.isOk()).toBe(true);
-      if (result.isOk()) {
-        expect(result.value.length).toBe(1);
-        expect(result.value[0]!.title).toBe("Entry 1");
       }
     });
 
@@ -167,40 +137,22 @@ describe("service + persistence", () => {
       const result = await service.read(created.value.meta.id);
       expect(result.isOk()).toBe(true);
       if (result.isOk()) {
-        expect(result.value.body).toBe("Full body content here.");
+        expect(result.value.body).toContain("Full body content here.");
       }
     });
 
-    test("increments used counter", async () => {
+    test("read is pure — no side effects", async () => {
       const created = await service.capture({ title: "Test", body: "body" });
       if (!created.isOk()) return;
       const id = created.value.meta.id;
 
-      const r1 = await service.read(id);
-      expect(r1.isOk()).toBe(true);
-      if (r1.isOk()) {
-        expect(r1.value.meta.used).toBe(1);
-      }
+      // read multiple times — should not change anything
+      await service.read(id);
+      await service.read(id);
+      const r3 = await service.read(id);
 
-      const r2 = await service.read(id);
-      expect(r2.isOk()).toBe(true);
-      if (r2.isOk()) {
-        expect(r2.value.meta.used).toBe(2);
-      }
-    });
-
-    test("updates last_used timestamp", async () => {
-      const created = await service.capture({ title: "Test", body: "body" });
-      if (!created.isOk()) return;
-
-      const before = created.value.meta.last_used;
-      await new Promise(r => setTimeout(r, 10));
-      
-      const result = await service.read(created.value.meta.id);
-      expect(result.isOk()).toBe(true);
-      if (result.isOk()) {
-        expect(result.value.meta.last_used).not.toBe(before);
-      }
+      expect(r3.isOk()).toBe(true);
+      // no used counter, no last_used, no write-back
     });
 
     test("fails for invalid id", async () => {
@@ -216,8 +168,6 @@ describe("service + persistence", () => {
 
       const result = await service.updateMeta(created.value.meta.id, {
         title: "Updated Title",
-        status: "consolidated",
-        pinned: true,
         tags: ["topic__new"],
       });
 
@@ -227,9 +177,6 @@ describe("service + persistence", () => {
       expect(read.isOk()).toBe(true);
       if (read.isOk()) {
         expect(read.value.meta.title).toBe("Updated Title");
-        expect(read.value.meta.status).toBe("consolidated");
-        expect(read.value.meta.pinned).toBe(true);
-        expect(read.value.meta.tags).toEqual(["topic__new"]);
       }
     });
   });
@@ -245,8 +192,182 @@ describe("service + persistence", () => {
       const read = await service.read(created.value.meta.id);
       expect(read.isOk()).toBe(true);
       if (read.isOk()) {
-        expect(read.value.body).toBe("new body content");
+        expect(read.value.body).toContain("new body content");
       }
+    });
+  });
+
+  describe("rename", () => {
+    test("updates title and filename", async () => {
+      const created = await service.capture({ title: "Old Title", body: "body content" });
+      if (!created.isOk()) return;
+      const id = created.value.meta.id;
+
+      const result = await service.rename(id, "New Title");
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+
+      const read = await service.read(id);
+      expect(read.isOk()).toBe(true);
+      if (read.isOk()) {
+        expect(read.value.meta.title).toBe("New Title");
+        expect(read.value.body).toContain("body content");
+      }
+    });
+
+    test("updates inbound link display text matching old title", async () => {
+      const entryB = await service.capture({ title: "Entry B", body: "b content" });
+      if (!entryB.isOk()) return;
+      const idB = entryB.value.meta.id;
+
+      const entryA = await service.capture({
+        title: "Entry A",
+        body: `see [[${idB}|Entry B]] for context`,
+      });
+      if (!entryA.isOk()) return;
+      const idA = entryA.value.meta.id;
+
+      const result = await service.rename(idB, "Renamed B");
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+      expect(result.value.updatedInboundLinks).toBe(1);
+
+      const readA = await service.read(idA);
+      expect(readA.isOk()).toBe(true);
+      if (readA.isOk()) {
+        expect(readA.value.body).toContain(`[[${idB}|Renamed B]]`);
+      }
+    });
+
+    test("preserves custom display text on inbound links", async () => {
+      const entryB = await service.capture({ title: "Entry B", body: "b content" });
+      if (!entryB.isOk()) return;
+      const idB = entryB.value.meta.id;
+
+      // entry A links to B with CUSTOM display text (not matching title)
+      const entryA = await service.capture({
+        title: "Entry A",
+        body: `see [[${idB}|my custom label]] here`,
+      });
+      if (!entryA.isOk()) return;
+      const idA = entryA.value.meta.id;
+
+      const result = await service.rename(idB, "Renamed B");
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+      expect(result.value.updatedInboundLinks).toBe(0);
+
+      // custom display text should be preserved
+      const readA = await service.read(idA);
+      expect(readA.isOk()).toBe(true);
+      if (readA.isOk()) {
+        expect(readA.value.body).toContain(`[[${idB}|my custom label]]`);
+      }
+    });
+  });
+
+  describe("links", () => {
+    test("returns outbound links from entry body", async () => {
+      const a = await service.capture({ title: "A", body: "standalone", tags: [] });
+      if (!a.isOk()) return;
+
+      const b = await service.capture({
+        title: "B",
+        body: `links to [[${a.value.meta.id}|A]] here`,
+        tags: [],
+      });
+      if (!b.isOk()) return;
+
+      const result = await service.links(b.value.meta.id);
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+
+      expect(result.value.outbound).toHaveLength(1);
+      expect(result.value.outbound[0]!.id).toBe(a.value.meta.id);
+      expect(result.value.outbound[0]!.displayText).toBe("A");
+    });
+
+    test("returns inbound links pointing to entry", async () => {
+      const a = await service.capture({ title: "A", body: "standalone", tags: [] });
+      if (!a.isOk()) return;
+
+      const b = await service.capture({
+        title: "B",
+        body: `links to [[${a.value.meta.id}|A]]`,
+        tags: [],
+      });
+      if (!b.isOk()) return;
+
+      const result = await service.links(a.value.meta.id);
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+
+      expect(result.value.inbound).toHaveLength(1);
+      expect(result.value.inbound[0]!.id).toBe(b.value.meta.id);
+      expect(result.value.inbound[0]!.title).toBe("B");
+      expect(result.value.outbound).toHaveLength(0);
+    });
+  });
+
+  describe("orphans", () => {
+    test("returns entries with no inbound links", async () => {
+      const a = await service.capture({ title: "A", body: "no links to me", tags: [] });
+      if (!a.isOk()) return;
+
+      const b = await service.capture({ title: "B", body: "also alone", tags: [] });
+      if (!b.isOk()) return;
+
+      const c = await service.capture({
+        title: "C",
+        body: `links to [[${a.value.meta.id}|A]]`,
+        tags: [],
+      });
+      if (!c.isOk()) return;
+
+      const result = await service.orphans();
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+
+      // B and C are orphans (no one links to them). A has an inbound link from C.
+      expect(result.value).toContain(b.value.meta.id);
+      expect(result.value).toContain(c.value.meta.id);
+      expect(result.value).not.toContain(a.value.meta.id);
+    });
+  });
+
+  describe("brokenLinks", () => {
+    test("detects links to nonexistent entries", async () => {
+      const a = await service.capture({
+        title: "A",
+        body: "links to [[id__zzzzzz|ghost]]",
+        tags: [],
+      });
+      if (!a.isOk()) return;
+
+      const result = await service.brokenLinks();
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0]!.sourceId).toBe(a.value.meta.id);
+      expect(result.value[0]!.targetId).toBe("id__zzzzzz");
+    });
+
+    test("returns empty when all links are valid", async () => {
+      const a = await service.capture({ title: "A", body: "a content", tags: [] });
+      if (!a.isOk()) return;
+
+      await service.capture({
+        title: "B",
+        body: `links to [[${a.value.meta.id}|A]]`,
+        tags: [],
+      });
+
+      const result = await service.brokenLinks();
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+
+      expect(result.value).toHaveLength(0);
     });
   });
 

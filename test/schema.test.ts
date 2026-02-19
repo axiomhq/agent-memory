@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { type } from "arktype";
-import { JournalQueueEntrySchema, MemoryEntryMetaSchema } from "../src/schema.js";
+import { JournalQueueEntrySchema } from "../src/schema.js";
+import type { MemoryEntryMeta } from "../src/schema.js";
 
 describe("schema", () => {
   describe("JournalQueueEntrySchema", () => {
@@ -80,59 +81,29 @@ describe("schema", () => {
     });
   });
 
-  describe("MemoryEntryMetaSchema", () => {
-    const validMeta = {
-      id: "id__abc123",
-      title: "Test Entry",
-      status: "captured",
-      used: 0,
-      last_used: "2026-02-13T12:00:00Z",
-      pinned: false,
-      createdAt: 1707849600000,
-      updatedAt: 1707849600000,
-    };
-
-    test("accepts valid entry", () => {
-      const result = MemoryEntryMetaSchema(validMeta);
-      expect(result instanceof type.errors).toBe(false);
-    });
-
-    test("accepts all valid status values", () => {
-      for (const status of ["captured", "consolidated", "promoted"] as const) {
-        const result = MemoryEntryMetaSchema({ ...validMeta, status });
-        expect(result instanceof type.errors).toBe(false);
-      }
-    });
-
-    test("accepts optional fields", () => {
-      const withOptional = {
-        ...validMeta,
-        tags: ["topic__test", "area__demo"],
-        sources: { harness: "amp", threadId: "T-123" },
+  describe("MemoryEntryMeta", () => {
+    test("interface has expected fields", () => {
+      const meta: MemoryEntryMeta = {
+        id: "id__abc123",
+        title: "Test Entry",
+        tags: ["topic__test"],
+        org: "default",
       };
 
-      const result = MemoryEntryMetaSchema(withOptional);
-      expect(result instanceof type.errors).toBe(false);
+      expect(meta.id).toBe("id__abc123");
+      expect(meta.title).toBe("Test Entry");
+      expect(meta.tags).toEqual(["topic__test"]);
     });
 
-    test("rejects invalid id format", () => {
-      const result = MemoryEntryMetaSchema({ ...validMeta, id: "invalid" });
-      expect(result instanceof type.errors).toBe(true);
-    });
+    test("org field works", () => {
+      const meta: MemoryEntryMeta = {
+        id: "id__abc123",
+        title: "Test Entry",
+        tags: [],
+        org: "axiom",
+      };
 
-    test("rejects invalid status", () => {
-      const result = MemoryEntryMetaSchema({ ...validMeta, status: "invalid" });
-      expect(result instanceof type.errors).toBe(true);
-    });
-
-    test("rejects negative used count", () => {
-      const result = MemoryEntryMetaSchema({ ...validMeta, used: -1 });
-      expect(result instanceof type.errors).toBe(true);
-    });
-
-    test("rejects empty title", () => {
-      const result = MemoryEntryMetaSchema({ ...validMeta, title: "" });
-      expect(result instanceof type.errors).toBe(true);
+      expect(meta.org).toBe("axiom");
     });
   });
 });

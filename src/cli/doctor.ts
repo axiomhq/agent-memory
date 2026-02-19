@@ -35,37 +35,40 @@ export async function checkHealth(rootDir: string): Promise<HealthCheckResult> {
     };
   }
 
-  const topicsDir = join(rootDir, "topics");
-  const archiveDir = join(rootDir, "archive");
+  const orgsDir = join(rootDir, "orgs");
   const inboxDir = join(rootDir, "inbox");
 
-  for (const dir of [topicsDir, archiveDir]) {
-    if (!existsSync(dir)) continue;
+  if (existsSync(orgsDir)) {
+    for (const orgEntry of readdirSync(orgsDir, { withFileTypes: true })) {
+      if (!orgEntry.isDirectory()) continue;
+      const archiveDir = join(orgsDir, orgEntry.name, "archive");
+      if (!existsSync(archiveDir)) continue;
 
-    for (const file of readdirSync(dir)) {
-      if (!file.endsWith(".md")) continue;
+      for (const file of readdirSync(archiveDir)) {
+        if (!file.endsWith(".md")) continue;
 
-      const idMatch = file.match(/(id__[A-Za-z0-9]{6})/);
-      if (!idMatch) {
-        issues.push({
-          severity: "warning",
-          message: `file missing id in filename: ${file}`,
-          location: dir,
-        });
-        continue;
+        const idMatch = file.match(/(id__[A-Za-z0-9]{6})/);
+        if (!idMatch) {
+          issues.push({
+            severity: "warning",
+            message: `file missing id in filename: ${file}`,
+            location: archiveDir,
+          });
+          continue;
+        }
+
+        const id = idMatch[1];
+        if (id && !isValidId(id)) {
+          issues.push({
+            severity: "error",
+            message: `invalid id format: ${id}`,
+            location: join(archiveDir, file),
+          });
+          continue;
+        }
+
+        totalEntries++;
       }
-
-      const id = idMatch[1];
-      if (id && !isValidId(id)) {
-        issues.push({
-          severity: "error",
-          message: `invalid id format: ${id}`,
-          location: join(dir, file),
-        });
-        continue;
-      }
-
-      totalEntries++;
     }
   }
 

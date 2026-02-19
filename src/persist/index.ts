@@ -8,7 +8,6 @@ export type MemoryPersistenceError =
   | { _tag: "memory.persist.parse"; path: string; message: string };
 
 export interface MemoryListFilter {
-  status?: MemoryEntryMeta["status"];
   query?: string;
   limit?: number;
   tags?: string[];

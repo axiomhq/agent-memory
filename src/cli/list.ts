@@ -11,7 +11,6 @@ export async function run(args: string[]) {
   const { values } = parseArgs({
     args,
     options: {
-      status: { type: "string", short: "s" },
       query: { type: "string", short: "q" },
       limit: { type: "string", short: "l", default: "20" },
     },
@@ -27,7 +26,6 @@ export async function run(args: string[]) {
   const limit = parseInt(values.limit ?? "20", 10);
 
   const result = await service.list({
-    status: values.status as "captured" | "consolidated" | "promoted" | undefined,
     query: values.query,
     limit,
   });
@@ -46,8 +44,6 @@ export async function run(args: string[]) {
 
   for (const entry of result.value) {
     const tags = entry.tags?.length ? ` [${entry.tags.join(", ")}]` : "";
-    const pinned = entry.pinned ? " 📌" : "";
-    console.log(`${entry.id}: "${entry.title}"${tags}${pinned}`);
-    console.log(`  used: ${entry.used} | status: ${entry.status} | last: ${entry.last_used}`);
+    console.log(`${entry.id}: "${entry.title}"${tags}`);
   }
 }
