@@ -23,8 +23,8 @@
         "bun run test passes"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "This is the foundation — everything else depends on the new schema. The MemoryEntry type becomes { id: string; title: string; tags: string[]; body: string; createdAt: number; updatedAt: number; org?: string; sources?: ... }. id comes from filename, title from # heading, tags from #tag in body."
+      "passes": true,
+      "notes": "DONE: commit 29a68da. MemoryEntryMetaSchema removed, MemoryEntryMeta is plain TS interface. removed used/last_used/pinned/status. serializeMemoryMarkdown(title, tags, body) produces pure markdown. parseMemoryMarkdown(text, path, id) extracts title from heading. service.read() is pure. All 214 tests pass."
     },
     {
       "id": "US-002",
@@ -158,8 +158,8 @@
         "bun run test passes"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": "Minimal change — just strip dead references. Full graph-aware defrag is phase 2."
+      "passes": true,
+      "notes": "DONE: completed as part of US-001 commit 29a68da. EntryForDefrag no longer has used/last_used/pinned/status. buildDefragPrompt() uses content relevance for tiering, not usage counters. All tests updated."
     },
     {
       "id": "US-009",
