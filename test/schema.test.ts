@@ -89,6 +89,7 @@ describe("schema", () => {
         tags: ["topic__test"],
         createdAt: 1707849600000,
         updatedAt: 1707849600000,
+        org: "default",
       };
 
       expect(meta.id).toBe("id__abc123");

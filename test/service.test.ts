@@ -72,8 +72,8 @@ describe("service + persistence", () => {
 
       expect(result.isOk()).toBe(true);
 
-      const topicsDir = join(testDir, "topics");
-      expect(existsSync(topicsDir)).toBe(true);
+      const archiveDir = join(testDir, "orgs", "default", "archive");
+      expect(existsSync(archiveDir)).toBe(true);
 
       const id = result.isOk() ? result.value.meta.id : "";
       expect(id).toBeTruthy();

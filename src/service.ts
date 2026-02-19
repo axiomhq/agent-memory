@@ -56,7 +56,7 @@ export function createMemoryService(adapter: MemoryPersistenceAdapter): MemorySe
               createdAt: now,
               updatedAt: now,
               ...(input.sources ? { sources: input.sources } : {}),
-              ...(input.org ? { org: input.org } : {}),
+              org: input.org ?? "default",
             },
             body: input.body,
           };

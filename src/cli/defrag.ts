@@ -62,7 +62,7 @@ export async function run(_args: string[]) {
   const hotEntries = hotWithBody.filter((e): e is NonNullable<typeof e> => e !== null);
   const warmEntries = tiered.warm.map((meta) => ({
     meta,
-    path: `${rootDir}/topics/${meta.id}.md`,
+    path: `${rootDir}/orgs/default/archive/${meta.id}.md`,
   }));
 
   const section = generateAgentsMdSection(hotEntries, warmEntries);

@@ -57,7 +57,7 @@ export interface MemoryEntryMeta {
   createdAt: number;
   updatedAt: number;
   sources?: MemorySources;
-  org?: string;
+  org: string;
 }
 
 export interface MemoryEntry {

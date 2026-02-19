@@ -1,8 +1,6 @@
 /**
  * file-based memory persistence adapter.
- * directory layout:
- *   - root level: topics/, archive/ (personal, no org)
- *   - org-scoped: orgs/{org}/topics/, orgs/{org}/archive/
+ * directory layout: orgs/{org}/archive/ — all entries scoped under an org.
  * filename convention: slug id__XXXXXX.md
  *
  * WHY no tags in filename, no _top-of-mind prefix:
@@ -42,7 +40,7 @@ interface FileAdapterOptions {
 }
 
 
-function readEntriesFromDir(dir: string): Array<{ meta: MemoryEntryMeta; filePath: string }> {
+function readEntriesFromDir(dir: string, org: string): Array<{ meta: MemoryEntryMeta; filePath: string }> {
   if (!existsSync(dir)) return [];
 
   const results: Array<{ meta: MemoryEntryMeta; filePath: string }> = [];
@@ -69,6 +67,7 @@ function readEntriesFromDir(dir: string): Array<{ meta: MemoryEntryMeta; filePat
           tags,
           createdAt: now,
           updatedAt: now,
+          org,
         },
         filePath,
       });
@@ -80,7 +79,6 @@ function readEntriesFromDir(dir: string): Array<{ meta: MemoryEntryMeta; filePat
   return results;
 }
 
-const TOPICS_DIR = "topics";
 const ARCHIVE_DIR = "archive";
 const ORGS_DIR = "orgs";
 
@@ -89,18 +87,16 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
     rootDir: options.rootDir,
   };
 
-  function getTopicsDir(org?: string): string {
-    if (org) {
-      return join(opts.rootDir, ORGS_DIR, org, TOPICS_DIR);
-    }
-    return join(opts.rootDir, TOPICS_DIR);
+  function getArchiveDir(org: string): string {
+    return join(opts.rootDir, ORGS_DIR, org, ARCHIVE_DIR);
   }
 
-  function getArchiveDir(org?: string): string {
-    if (org) {
-      return join(opts.rootDir, ORGS_DIR, org, ARCHIVE_DIR);
-    }
-    return join(opts.rootDir, ARCHIVE_DIR);
+  /** derive org name from a file path under orgs/{org}/archive/ */
+  function orgFromPath(filePath: string): string {
+    const rel = filePath.slice(opts.rootDir.length + 1);
+    const parts = rel.split("/");
+    // orgs/{org}/archive/filename.md
+    return parts[1] ?? "default";
   }
 
   function getOrgsDirs(): string[] {
@@ -117,17 +113,8 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
   }
 
   function findEntryFile(id: string): string | null {
-    const orgs = getOrgsDirs();
-
-    const allDirs: string[] = [];
-    allDirs.push(getTopicsDir());
-    allDirs.push(getArchiveDir());
-    for (const org of orgs) {
-      allDirs.push(getTopicsDir(org));
-      allDirs.push(getArchiveDir(org));
-    }
-
-    for (const dir of allDirs) {
+    for (const org of getOrgsDirs()) {
+      const dir = getArchiveDir(org);
       if (!existsSync(dir)) continue;
       for (const file of readdirSync(dir)) {
         if (file.includes(id)) {
@@ -145,12 +132,10 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
           let entries: MemoryEntryMeta[] = [];
 
           if (filter?.org) {
-            for (const dir of [getTopicsDir(filter.org), getArchiveDir(filter.org)]) {
-              entries.push(...readEntriesFromDir(dir).map((e) => e.meta));
-            }
+            entries.push(...readEntriesFromDir(getArchiveDir(filter.org), filter.org).map((e) => e.meta));
           } else {
-            for (const dir of [getTopicsDir(), getArchiveDir()]) {
-              entries.push(...readEntriesFromDir(dir).map((e) => e.meta));
+            for (const org of getOrgsDirs()) {
+              entries.push(...readEntriesFromDir(getArchiveDir(org), org).map((e) => e.meta));
             }
           }
 
@@ -217,6 +202,7 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
               tags,
               createdAt: now,
               updatedAt: now,
+              org: orgFromPath(filePath),
             },
             body: result.value.body,
           };
@@ -242,7 +228,7 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
 
       return ResultAsync.fromPromise(
         (async () => {
-          const targetDir = getTopicsDir(meta.org);
+          const targetDir = getArchiveDir(meta.org);
           if (!existsSync(targetDir)) {
             mkdirSync(targetDir, { recursive: true });
           }

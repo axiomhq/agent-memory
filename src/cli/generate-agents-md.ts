@@ -34,7 +34,7 @@ export async function run(args: string[]) {
   const hotEntries: Array<{ meta: (typeof entries)[number]; body: string }> = [];
   const warmEntries = entries.map((meta) => ({
     meta,
-    path: `${rootDir}/topics/${meta.id}.md`,
+    path: `${rootDir}/orgs/default/archive/${meta.id}.md`,
   }));
 
   const section = generateAgentsMdSection(hotEntries, warmEntries);

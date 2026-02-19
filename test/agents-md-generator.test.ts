@@ -13,12 +13,10 @@ import type { MemoryEntryMeta } from "../src/schema.js";
 const createMeta = (overrides: Partial<MemoryEntryMeta> = {}): MemoryEntryMeta => ({
   id: "id__abc123",
   title: "Test Entry",
-  status: "captured",
-  used: 0,
-  last_used: "2026-02-13T12:00:00Z",
-  pinned: false,
+  tags: [],
   createdAt: 1707849600000,
   updatedAt: 1707849600000,
+  org: "default",
   ...overrides,
 });
 

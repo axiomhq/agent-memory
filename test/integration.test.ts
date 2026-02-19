@@ -35,7 +35,7 @@ describe("integration tests", () => {
   let testDir: string;
   let rootDir: string;
   let inboxDir: string;
-  let topicsDir: string;
+  let archiveDir: string;
   let adapter: ReturnType<typeof createFileMemoryPersistenceAdapter>;
   let service: ReturnType<typeof createMemoryService>;
 
@@ -43,9 +43,9 @@ describe("integration tests", () => {
     testDir = join(tmpdir(), `agent-memory-integration-${Date.now()}`);
     rootDir = testDir;
     inboxDir = join(testDir, "inbox");
-    topicsDir = join(testDir, "topics");
+    archiveDir = join(testDir, "orgs", "default", "archive");
     mkdirSync(inboxDir, { recursive: true });
-    mkdirSync(topicsDir, { recursive: true });
+    mkdirSync(archiveDir, { recursive: true });
     adapter = createFileMemoryPersistenceAdapter({ rootDir });
     service = createMemoryService(adapter);
   });
@@ -123,7 +123,7 @@ describe("integration tests", () => {
       expect(captureResult.isOk()).toBe(true);
       if (!captureResult.isOk()) return;
 
-      const files = readdirSync(topicsDir);
+      const files = readdirSync(archiveDir);
       expect(files.length).toBe(1);
       expect(files[0]).toMatch(/\.md$/);
       expect(files[0]).toContain(captureResult.value.meta.id);
@@ -263,6 +263,7 @@ describe("integration tests", () => {
                   tags: entry.tags,
                   createdAt: now,
                   updatedAt: now,
+                  org: "default",
                 },
                 body: entry.body,
               };
@@ -377,6 +378,7 @@ describe("integration tests", () => {
             tags: ["topic__core"],
             createdAt: now,
             updatedAt: now,
+            org: "default",
           },
           body: "This is a hot-tier entry with important content.\n\nMultiple paragraphs here.",
         },
@@ -390,6 +392,7 @@ describe("integration tests", () => {
             tags: ["topic__tips"],
             createdAt: now,
             updatedAt: now,
+            org: "default",
           },
           path: "/path/to/warm.md",
         },
@@ -482,7 +485,7 @@ Some existing content without memory section.`;
       // all entries as warm (hot tier determined by defrag agent)
       const warmEntries = listResult.value.map((meta) => ({
         meta,
-        path: `${rootDir}/topics/${meta.id}.md`,
+        path: `${rootDir}/orgs/default/archive/${meta.id}.md`,
       }));
 
       const section = generateAgentsMdSection([], warmEntries);
@@ -502,6 +505,7 @@ Some existing content without memory section.`;
           tags: ["topic__auth"],
           createdAt: Date.now(),
           updatedAt: Date.now(),
+          org: "default",
         },
         body: "some content about auth",
       });
@@ -723,6 +727,7 @@ Some existing content without memory section.`;
                   tags: entry.tags,
                   createdAt: now,
                   updatedAt: now,
+                  org: "default",
                 },
                 body: entry.body,
               };

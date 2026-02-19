@@ -18,7 +18,7 @@ function createEntry(
   const content = serializeMemoryMarkdown(title, tags, body);
 
   const filename = `${title.toLowerCase().replace(/\s+/g, "-")} ${id}.md`;
-  const filepath = join(currentTestDir, "topics", filename);
+  const filepath = join(currentTestDir, "orgs", "default", "archive", filename);
   writeFileSync(filepath, content);
 }
 
@@ -43,7 +43,7 @@ describe("cli list", () => {
 
   beforeEach(async () => {
     currentTestDir = join(tmpdir(), `agent-memory-cli-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    mkdirSync(join(currentTestDir, "topics"), { recursive: true });
+    mkdirSync(join(currentTestDir, "orgs", "default", "archive"), { recursive: true });
 
     consoleLogSpy = spyOn(console, "log").mockImplementation(() => {});
     consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
@@ -108,8 +108,8 @@ describe("cli list", () => {
       createEntry(validIds[i]!, `Entry ${i}`);
     }
 
-    const topicsDir = join(currentTestDir, "topics");
-    const files = readdirSync(topicsDir);
+    const archiveDir = join(currentTestDir, "orgs", "default", "archive");
+    const files = readdirSync(archiveDir);
     expect(files.length).toBe(5);
 
     const config = (await import("../src/config.js"));
