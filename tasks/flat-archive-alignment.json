@@ -1,0 +1,116 @@
+{
+  "project": "agent-memory",
+  "branchName": "ralph/flat-archive-alignment",
+  "description": "Align implementation with the flat-archive plan and ADR 0001. Fixes 6 divergences where PRD agents dropped context: directory layout, org handling, timestamp removal, tiering model, index note, and per-org output.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Replace topics/ with archive/, make org required with default",
+      "description": "As a developer, I need the directory layout to match the plan: orgs/{org}/inbox/ and orgs/{org}/archive/. No top-level topics/ or archive/ — everything scoped under an org, defaulting to 'default'.",
+      "acceptanceCriteria": [
+        "In src/persist/filesystem.ts: remove TOPICS_DIR constant, rename references to ARCHIVE_DIR",
+        "All entries write to orgs/{org}/archive/ — no top-level topics/ or archive/ dirs",
+        "org field on MemoryEntryMeta (src/schema.ts) becomes required string, not optional",
+        "org on CaptureInput (src/service.ts) becomes optional string with default 'default' applied in service.capture()",
+        "MemoryListFilter.org remains optional (omitting means 'scan all orgs')",
+        "getTopicsDir() removed — only getArchiveDir(org) exists, always returns orgs/{org}/archive/",
+        "findEntryFile() scans orgs/*/archive/ only",
+        "list() scans orgs/*/archive/ dirs",
+        "Existing tests updated — no test references 'topics'",
+        "bun run typecheck passes",
+        "bun run test passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "READ the flat-archive plan in thread T-019c767b and ADR 0001 (docs/adr/0001-notes-and-links-memory-model.md) FIRST. The user said: 'I absolutelly despise the idea of a folder called topics. we want: inbox for unprocessed entries, archive for processed entries.' Journal queue already uses inbox/. Memory entries currently go to topics/ — they should go to archive/. The layout should be: orgs/{org}/inbox/ (journal), orgs/{org}/archive/ (entries), orgs/{org}/output-agents.md (generated). No top-level dirs — everything under orgs/. Default org is 'default'. IMPORTANT: inbox/ is the journal queue dir, already handled by journal.ts — this story only changes where MEMORY ENTRIES are stored (topics/ → archive/). Do NOT touch journal queue logic."
+    },
+    {
+      "id": "US-002",
+      "title": "Remove createdAt, updatedAt, sources from MemoryEntryMeta — delete timestamps.ts",
+      "description": "As a developer, I want to remove agent-invented fields that don't belong. Timestamps come from git when needed (by the caller, not the schema). Sources/provenance belongs in git commit messages, not in the entry.",
+      "acceptanceCriteria": [
+        "Remove createdAt and updatedAt from MemoryEntryMeta interface (src/schema.ts)",
+        "Remove sources field from MemoryEntryMeta interface",
+        "Remove MemorySourcesSchema and MemorySources type from src/schema.ts",
+        "Remove sources from CaptureInput (src/service.ts)",
+        "Delete src/timestamps.ts entirely",
+        "Delete test/timestamps.test.ts entirely",
+        "Remove getFileTimestamps export from package.json exports map if present",
+        "Update persist/filesystem.ts — read() and readEntriesFromDir() no longer set createdAt/updatedAt/sources on meta",
+        "Update service.ts — capture() no longer sets createdAt/updatedAt",
+        "Remove sort by updatedAt in list() if present (or sort by title/id instead)",
+        "All importing files updated — grep for 'createdAt', 'updatedAt', 'sources', 'MemorySources', 'timestamps' across src/ and test/",
+        "bun run typecheck passes",
+        "bun run test passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "The user said 'git is source of truth' for timestamps. This was misinterpreted as 'build a utility to extract git timestamps' — the actual intent was 'don't store timestamps at all, git already has this info.' The persistence adapter currently fakes timestamps with Date.now() on every read — they're meaningless noise. If defrag needs recency it can shell out to git directly. sources belongs in git commit messages per user instruction: 'put it in the commit associated with an operation.' CAUTION: check if anything in prompts/defrag.ts, agents-md/generator.ts, or machines/ references these fields. Update EntryForDefrag if needed."
+    },
+    {
+      "id": "US-003",
+      "title": "Replace hotTier/warmTier with topOfMind, write index note",
+      "description": "As a developer, I want defrag to output topOfMind: string[] and write an index note that links to those entries. The index note is how the system knows what's top-of-mind — it's a regular note in the graph, not a flag or property on entries.",
+      "acceptanceCriteria": [
+        "DefragDecision type (src/prompts/defrag.ts) changes from { actions, hotTier, warmTier } to { actions, topOfMind }",
+        "topOfMind is string[] — array of entry IDs the LLM considers actively relevant",
+        "buildDefragPrompt() updated: tiering section describes top-of-mind vs everything-else (no hot/warm/cold three-tier concept)",
+        "buildDefragPrompt() output schema shows { actions: [...], topOfMind: ['id__abc123'] }",
+        "parseDefragOutput() validates topOfMind instead of hotTier/warmTier",
+        "Index note has a deterministic stable ID (e.g., generated from a fixed seed so it's always the same)",
+        "Index note body contains [[id__XXXXXX|title]] links to each top-of-mind entry",
+        "Defrag's applyChanges step (or a new step after it) writes/updates the index note with the topOfMind IDs",
+        "The index note lives in the same archive dir as other entries — it's just a note",
+        "service.links(id) shows inbound links FROM the index note to top-of-mind entries",
+        "Defrag machine (src/machines/defrag.ts) context.decision uses new shape",
+        "generateAgentsMd actor input changes from { hotTier, warmTier, entries } to { topOfMind, entries }",
+        "All tests in test/prompts-defrag.test.ts and test/machines-defrag.test.ts updated",
+        "bun run typecheck passes",
+        "bun run test passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "ADR 0001 principle 4: 'top-of-mind is an index note, not a property. a special index note links to the entries that should be inlined in the consumer's system prompt. defrag updates the index, not the entries. entries don't know they're top of mind.' The user confirmed: the index note gets a deterministic ID, it is just a note — an important one, but just a note. The defrag prompt should instruct the LLM: 'Decide which entries are TOP OF MIND — foundational, actively relevant, well-connected in the link graph. These will be inlined in the agent's system prompt. Everything else is listed by title+id.' The three-tier concept (hot/warm/cold) is replaced by a binary: top-of-mind (inlined) vs everything else (listed)."
+    },
+    {
+      "id": "US-004",
+      "title": "Rewrite AGENTS.md generator to read index note, use [[id|text]] format",
+      "description": "As a developer, I want the AGENTS.md generator to read the index note to determine what to inline, and use [[id|text]] links for all entry references.",
+      "acceptanceCriteria": [
+        "generateAgentsMdSection() no longer takes topOfMind/hot/warm parameters",
+        "Instead, it reads the index note (by deterministic ID from US-003) and follows its [[id|title]] links to find top-of-mind entries",
+        "Top-of-mind entries rendered as: ## title - id__XXXXXX followed by body content, shown BEFORE the list",
+        "All other entries (not linked from index note) rendered as: - [[id__XXXXXX|title]]",
+        "Top-of-mind entries are NOT duplicated in the list",
+        "Remove assignTiers() function entirely",
+        "Remove TierAssignment interface",
+        "All entry references use [[id__XXXXXX|title]] wiki-link format — unified with note body link syntax",
+        "Generator needs access to the persistence adapter (to read index note + entry bodies) — update function signature accordingly",
+        "Tests updated in test/agents-md-generator.test.ts",
+        "bun run typecheck passes",
+        "bun run test passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "The user specified the exact format for top-of-mind entries: '## title - id__12345\\n\\ncontent content content' — shown BEFORE the rest, exclusively inlined, not present in the other list. Link format is unified on [[id|text]] wiki-style everywhere — the user explicitly said to unify. The generator becomes self-sufficient: it reads the index note, follows links, fetches bodies, and produces the output. The defrag machine's generateAgentsMd actor just calls the generator without passing tiering data. This decouples generation from defrag — you could regenerate AGENTS.md without running defrag."
+    },
+    {
+      "id": "US-005",
+      "title": "Write output-agents.md per org",
+      "description": "As a developer, I want AGENTS.md output written to orgs/{org}/output-agents.md so each org has its own generated memory section.",
+      "acceptanceCriteria": [
+        "The defrag machine's generateAgentsMd step resolves target path as: join(rootDir, 'orgs', org, 'output-agents.md')",
+        "Defrag machine/context needs to know which org it's operating on — add org to DefragInput or DefragContext if not already present",
+        "Each org gets its own output-agents.md with its own index note and entries",
+        "The consumer (axi-agent) is responsible for reading the output file and injecting it — document this convention but do NOT implement consumer-side changes",
+        "Update README.md or docs to document the final directory layout: orgs/{org}/inbox/, orgs/{org}/archive/, orgs/{org}/output-agents.md",
+        "Tests verify output goes to correct per-org path",
+        "bun run typecheck passes",
+        "bun run test passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "The user specified the directory layout: 'orgs/<orgname>/inbox/, orgs/<orgname>/archive/, orgs/<orgname>/output-agents.md, readme.md'. axi-agent changes to read from this path are a SEPARATE PRD. This story only changes where agent-memory writes the output. The defrag machine needs to know which org it's defragging — ensure org flows through from DefragInput to the generateAgentsMd actor."
+    }
+  ]
+}
