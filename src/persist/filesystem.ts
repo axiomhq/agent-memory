@@ -59,7 +59,7 @@ function readEntriesFromDir(dir: string): Array<{ meta: MemoryEntryMeta; filePat
       const result = parseMemoryMarkdown(text, filePath, id);
       if (result.isErr()) continue;
 
-      const tags = extractTags(result.value.body);
+      const tags = extractTags(text);
       const now = Date.now();
 
       results.push({
@@ -207,7 +207,7 @@ export function createFileMemoryPersistenceAdapter(options: FileAdapterOptions):
             throw new Error(result.error.message);
           }
 
-          const tags = extractTags(result.value.body);
+          const tags = extractTags(text);
           const now = Date.now();
 
           return {

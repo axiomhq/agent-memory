@@ -23,9 +23,14 @@ describe("extractTags", () => {
     expect(extractTags("#work and also #work again")).toEqual(["work"]);
   });
 
-  test("ignores headings (# followed by space)", () => {
-    const body = "# Title\n\n#tag1\n\n## Subtitle\n\n#tag2";
-    expect(extractTags(body)).toEqual(["tag1", "tag2"]);
+  test("extracts tags from heading lines", () => {
+    const body = "# Title #important\n\n#tag1\n\n## Subtitle #area__work\n\n#tag2";
+    expect(extractTags(body)).toEqual(["important", "tag1", "area__work", "tag2"]);
+  });
+
+  test("heading without tags produces no tags from heading text", () => {
+    const body = "# Just A Title\n\n#tag1";
+    expect(extractTags(body)).toEqual(["tag1"]);
   });
 
   test("ignores tags inside fenced code blocks", () => {
