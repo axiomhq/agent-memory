@@ -144,9 +144,6 @@ zero-config by default. optionally create `memory.config.json`:
   },
   "llm": {
     "command": "amp agent run"
-  },
-  "agentsMd": {
-    "targets": ["~/.config/amp/AGENTS.md"]
   }
 }
 ```

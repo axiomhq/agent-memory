@@ -9,7 +9,7 @@ describe("index note", () => {
   });
 
   it("INDEX_NOTE_ID is deterministic", () => {
-    expect(INDEX_NOTE_ID).toBe("id__ndxTop");
+    expect(INDEX_NOTE_ID).toBe("id__indexx");
   });
 
   it("builds note with wiki links to top-of-mind entries", () => {

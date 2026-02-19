@@ -31,7 +31,6 @@ mock.module("../src/config.js", () => ({
     storage: { root: getTestDir(), autoCommit: true, commitHook: "" },
     llm: { command: "", presets: {} },
     schedule: { consolidateIntervalHours: 2, defragIntervalHours: 24 },
-    agentsMd: { targets: [] },
   }),
   expandPath: (p: string) => p,
 }));

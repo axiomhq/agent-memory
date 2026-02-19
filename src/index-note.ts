@@ -9,7 +9,7 @@
 
 import type { MemoryEntry } from "./schema.js";
 
-export const INDEX_NOTE_ID = "id__ndxTop";
+export const INDEX_NOTE_ID = "id__indexx";
 
 /**
  * build the index note body from top-of-mind entries.
