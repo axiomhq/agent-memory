@@ -61,7 +61,7 @@ ${entriesSection}
 2. Decide what to merge, split, rename, or archive
 3. Decide which entries are TOP OF MIND — foundational, actively relevant, well-connected in the link graph
 
-Respond with ONLY a JSON object. No markdown fencing:
+IMPORTANT: You MUST respond with ONLY a raw JSON object. No prose, no commentary, no analysis, no markdown fencing. The very first character of your response must be \`{\`.
 
 {
   "actions": [
@@ -78,18 +78,80 @@ If no changes needed, respond with:
 { "actions": [], "topOfMind": [...] }`;
 }
 
-export function parseDefragOutput(raw: string): DefragDecision {
-  let cleaned = raw.trim();
+/**
+ * extracts a JSON object from a string that may contain surrounding prose.
+ * tries full string first, then strips markdown fences, then finds the
+ * outermost `{...}` block via brace-depth tracking.
+ */
+function extractJson(raw: string): unknown {
+  const trimmed = raw.trim();
 
-  if (cleaned.startsWith("```")) {
-    cleaned = cleaned.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+  // try parsing as-is
+  try {
+    return JSON.parse(trimmed);
+  } catch { /* fall through */ }
+
+  // try stripping markdown fences
+  if (trimmed.startsWith("```")) {
+    const stripped = trimmed.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+    try {
+      return JSON.parse(stripped);
+    } catch { /* fall through */ }
   }
 
+  // find outermost { ... } via brace-depth tracking
+  const start = trimmed.indexOf("{");
+  if (start === -1) {
+    throw new Error(`defrag output contains no JSON object: ${trimmed.slice(0, 200)}`);
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+
+    if (escape) {
+      escape = false;
+      continue;
+    }
+
+    if (ch === "\\") {
+      escape = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (ch === "{") depth++;
+    if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        const jsonStr = trimmed.slice(start, i + 1);
+        try {
+          return JSON.parse(jsonStr);
+        } catch {
+          throw new Error(`defrag output contains malformed JSON: ${jsonStr.slice(0, 200)}`);
+        }
+      }
+    }
+  }
+
+  throw new Error(`defrag output has unbalanced braces: ${trimmed.slice(0, 200)}`);
+}
+
+export function parseDefragOutput(raw: string): DefragDecision {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new Error(`defrag output is not valid JSON: ${cleaned.slice(0, 200)}`);
+    parsed = extractJson(raw);
+  } catch (e) {
+    throw new Error(`defrag output is not valid JSON: ${raw.trim().slice(0, 200)}`);
   }
 
   if (typeof parsed !== "object" || parsed === null) {

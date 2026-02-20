@@ -256,6 +256,39 @@ describe("parseDefragOutput", () => {
     });
   });
 
+  it("extracts JSON from surrounding prose", () => {
+    const json = JSON.stringify({ actions: [], topOfMind: ["id__abc123"] });
+    const raw = `I'll analyze the entries for duplicates.\n\n**Key findings:**\n- 3 duplicates found\n\n${json}`;
+
+    const result = parseDefragOutput(raw);
+
+    expect(result.actions).toEqual([]);
+    expect(result.topOfMind).toEqual(["id__abc123"]);
+  });
+
+  it("extracts JSON when prose appears both before and after", () => {
+    const json = JSON.stringify({ actions: [{ type: "archive", id: "id__old", reason: "stale" }], topOfMind: [] });
+    const raw = `Here's my analysis:\n\n${json}\n\nLet me know if you need changes.`;
+
+    const result = parseDefragOutput(raw);
+
+    expect(result.actions).toHaveLength(1);
+    expect(result.actions[0]).toEqual({ type: "archive", id: "id__old", reason: "stale" });
+  });
+
+  it("handles JSON with nested braces in string values", () => {
+    const json = JSON.stringify({
+      actions: [{ type: "merge", sources: ["id__a"], title: "t", body: "use {x: 1} pattern", tags: [] }],
+      topOfMind: [],
+    });
+    const raw = `Analysis complete.\n\n${json}`;
+
+    const result = parseDefragOutput(raw);
+
+    expect(result.actions).toHaveLength(1);
+    expect((result.actions[0] as { body: string }).body).toBe("use {x: 1} pattern");
+  });
+
   it("throws on invalid JSON", () => {
     expect(() => parseDefragOutput("not json")).toThrow(
       "defrag output is not valid JSON",
