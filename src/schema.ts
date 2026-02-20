@@ -10,16 +10,14 @@
 
 import { type } from "arktype";
 
+const AmpThreadRetrieval = type({ method: "'amp-thread'", threadId: "string" });
+const FileRetrieval = type({ method: "'file'", content: "string" });
+
 export const JournalQueueEntrySchema = type({
   version: '"1"',
   timestamp: "string",
-  harness: "'amp' | 'cursor' | 'codex' | 'manual'",
-  retrieval: {
-    method: "'amp-thread' | 'cursor-session' | 'file'",
-    "threadId?": "string",
-    "sessionPath?": "string",
-    "filePath?": "string",
-  },
+  harness: "'amp' | 'codex' | 'manual'",
+  retrieval: AmpThreadRetrieval.or(FileRetrieval),
   context: {
     cwd: "string",
     "repo?": "string",

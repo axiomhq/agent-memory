@@ -185,8 +185,8 @@ describe("cli capture", () => {
 
       expect(entry.version).toBe("1");
       expect(typeof entry.timestamp).toBe("string");
-      expect(["amp", "cursor", "codex", "manual"]).toContain(entry.harness);
-      expect(["amp-thread", "cursor-session", "file"]).toContain(entry.retrieval.method);
+      expect(["amp", "codex", "manual"]).toContain(entry.harness);
+      expect(["amp-thread", "file"]).toContain(entry.retrieval.method);
       expect(typeof entry.context.cwd).toBe("string");
     });
   });

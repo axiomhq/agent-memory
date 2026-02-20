@@ -24,7 +24,7 @@ export async function run(args: string[]) {
   });
 
   if (!values.title || !values.body) {
-    console.error("usage: memory capture --title <title> --body <body> [--tags <tag>...] [--harness <amp|manual>] [--thread-id <id>]");
+    console.error("usage: memory capture --title <title> --body <body> [--tags <tag>...] [--harness <amp|codex|manual>] [--thread-id <id>]");
     process.exit(1);
   }
 
@@ -35,10 +35,9 @@ export async function run(args: string[]) {
     version: "1" as const,
     timestamp: new Date().toISOString(),
     harness: values.harness as JournalQueueEntry["harness"],
-    retrieval: {
-      method: values["thread-id"] ? "amp-thread" : "file",
-      ...(values["thread-id"] ? { threadId: values["thread-id"] } : {}),
-    },
+    retrieval: values["thread-id"]
+      ? { method: "amp-thread" as const, threadId: values["thread-id"] }
+      : { method: "file" as const, content: values.body! },
     context: {
       cwd: values.cwd ?? process.cwd(),
       ...(values.repo ? { repo: values.repo } : {}),

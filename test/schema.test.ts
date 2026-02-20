@@ -31,6 +31,7 @@ describe("schema", () => {
         harness: "manual",
         retrieval: {
           method: "file",
+          content: "test content",
         },
         context: {
           cwd: "/path/to/project",
@@ -59,7 +60,7 @@ describe("schema", () => {
         version: "1",
         timestamp: "2026-02-13T12:00:00Z",
         harness: "invalid",
-        retrieval: { method: "file" },
+        retrieval: { method: "file", content: "test" },
         context: { cwd: "/path" },
       };
 
@@ -72,7 +73,7 @@ describe("schema", () => {
         version: "1",
         // missing timestamp
         harness: "amp",
-        retrieval: { method: "file" },
+        retrieval: { method: "file", content: "test" },
         context: { cwd: "/path" },
       };
 

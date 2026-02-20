@@ -138,6 +138,7 @@ describe("integration tests", () => {
         harness: "manual" as const,
         retrieval: {
           method: "file" as const,
+          content: "test content",
         },
         context: {
           cwd: "/test/project",
@@ -631,6 +632,7 @@ Some existing content without memory section.`;
         harness: "manual" as const,
         retrieval: {
           method: "file" as const,
+          content: "test content",
         },
         context: {
           cwd: "/test/project",
