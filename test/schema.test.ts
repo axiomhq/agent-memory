@@ -24,6 +24,24 @@ describe("schema", () => {
       expect(result instanceof type.errors).toBe(false);
     });
 
+    test("accepts valid pi-session entry", () => {
+      const entry = {
+        version: "1",
+        timestamp: "2026-02-13T12:00:00Z",
+        harness: "pi",
+        retrieval: {
+          method: "pi-session",
+          sessionPath: "/tmp/sessions/abc123.jsonl",
+        },
+        context: {
+          cwd: "/path/to/project",
+        },
+      };
+
+      const result = JournalQueueEntrySchema(entry);
+      expect(result instanceof type.errors).toBe(false);
+    });
+
     test("accepts valid manual entry", () => {
       const entry = {
         version: "1",

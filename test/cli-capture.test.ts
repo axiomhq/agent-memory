@@ -133,6 +133,22 @@ describe("cli capture", () => {
       expect(result!.entry.retrieval.threadId).toBe("T-999");
     });
 
+    test("--session-path sets retrieval method to pi-session", async () => {
+      await run(["--title", "t", "--body", "b", "--session-path", "/tmp/s.jsonl"]);
+
+      const result = readInboxEntry();
+      expect(result!.entry.retrieval.method).toBe("pi-session");
+      expect(result!.entry.retrieval.sessionPath).toBe("/tmp/s.jsonl");
+    });
+
+    test("--session-path with --harness pi", async () => {
+      await run(["--title", "t", "--body", "b", "--harness", "pi", "--session-path", "/tmp/s.jsonl"]);
+
+      const result = readInboxEntry();
+      expect(result!.entry.harness).toBe("pi");
+      expect(result!.entry.retrieval.sessionPath).toBe("/tmp/s.jsonl");
+    });
+
     test("--cwd sets context.cwd", async () => {
       await run(["--title", "t", "--body", "b", "--cwd", "/custom/path"]);
 
@@ -185,8 +201,8 @@ describe("cli capture", () => {
 
       expect(entry.version).toBe("1");
       expect(typeof entry.timestamp).toBe("string");
-      expect(["amp", "codex", "manual"]).toContain(entry.harness);
-      expect(["amp-thread", "file"]).toContain(entry.retrieval.method);
+      expect(["amp", "pi", "codex", "manual"]).toContain(entry.harness);
+      expect(["amp-thread", "pi-session", "file"]).toContain(entry.retrieval.method);
       expect(typeof entry.context.cwd).toBe("string");
     });
   });

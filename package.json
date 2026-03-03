@@ -13,6 +13,7 @@
     "./machines/consolidate": "./src/machines/consolidate.ts",
     "./adapters": "./src/adapters/index.ts",
     "./adapters/amp": "./src/adapters/amp.ts",
+    "./adapters/pi": "./src/adapters/pi.ts",
     "./prompts/consolidate": "./src/prompts/consolidate.ts",
     "./machines/defrag": "./src/machines/defrag.ts",
     "./prompts/defrag": "./src/prompts/defrag.ts",

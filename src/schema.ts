@@ -11,13 +11,14 @@
 import { type } from "arktype";
 
 const AmpThreadRetrieval = type({ method: "'amp-thread'", threadId: "string" });
+const PiSessionRetrieval = type({ method: "'pi-session'", sessionPath: "string" });
 const FileRetrieval = type({ method: "'file'", content: "string" });
 
 export const JournalQueueEntrySchema = type({
   version: '"1"',
   timestamp: "string",
-  harness: "'amp' | 'codex' | 'manual'",
-  retrieval: AmpThreadRetrieval.or(FileRetrieval),
+  harness: "'amp' | 'pi' | 'codex' | 'manual'",
+  retrieval: AmpThreadRetrieval.or(PiSessionRetrieval).or(FileRetrieval),
   context: {
     cwd: "string",
     "repo?": "string",

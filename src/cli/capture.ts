@@ -17,6 +17,7 @@ export async function run(args: string[]) {
       tags: { type: "string", short: "g", multiple: true },
       harness: { type: "string", default: "manual" },
       "thread-id": { type: "string" },
+      "session-path": { type: "string" },
       cwd: { type: "string", default: process.cwd() },
       repo: { type: "string" },
     },
@@ -24,7 +25,7 @@ export async function run(args: string[]) {
   });
 
   if (!values.title || !values.body) {
-    console.error("usage: memory capture --title <title> --body <body> [--tags <tag>...] [--harness <amp|codex|manual>] [--thread-id <id>]");
+    console.error("usage: memory capture --title <title> --body <body> [--tags <tag>...] [--harness <amp|pi|codex|manual>] [--thread-id <id>] [--session-path <path>]");
     process.exit(1);
   }
 
@@ -37,7 +38,9 @@ export async function run(args: string[]) {
     harness: values.harness as JournalQueueEntry["harness"],
     retrieval: values["thread-id"]
       ? { method: "amp-thread" as const, threadId: values["thread-id"] }
-      : { method: "file" as const, content: values.body! },
+      : values["session-path"]
+        ? { method: "pi-session" as const, sessionPath: values["session-path"] }
+        : { method: "file" as const, content: values.body! },
     context: {
       cwd: values.cwd ?? process.cwd(),
       ...(values.repo ? { repo: values.repo } : {}),
