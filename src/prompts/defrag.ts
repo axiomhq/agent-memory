@@ -11,6 +11,7 @@ export interface EntryForDefrag {
   title: string;
   body: string;
   tags: string[];
+  org: string;
 }
 
 export interface DefragDecision {

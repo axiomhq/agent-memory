@@ -50,6 +50,7 @@ export async function run(args: string[]) {
         title: meta.title,
         body: readResult.value.body,
         tags: meta.tags ?? [],
+        org: meta.org ?? org,
       });
     }
   }

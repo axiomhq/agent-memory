@@ -37,7 +37,7 @@ const runAgentActor = fromPromise<string, { entries: EntryForDefrag[] }>(async (
   throw new Error("runAgent: not provided via machine.provide()");
 });
 
-const applyChangesActor = fromPromise<number, { actions: DefragAction[] }>(async () => {
+const applyChangesActor = fromPromise<number, { actions: DefragAction[]; entries: EntryForDefrag[] }>(async () => {
   throw new Error("applyChanges: not provided via machine.provide()");
 });
 
@@ -200,7 +200,7 @@ export const defragMachine = setup({
       invoke: {
         id: "applyChanges",
         src: "applyChanges",
-        input: ({ context }) => ({ actions: context.decision?.actions ?? [] }),
+        input: ({ context }) => ({ actions: context.decision?.actions ?? [], entries: context.entries }),
         onDone: {
           target: "generateAgentsMd",
           actions: {

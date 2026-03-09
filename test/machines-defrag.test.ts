@@ -46,7 +46,7 @@ function createTestProviders(overrides: {
           return agentOutput;
         }),
 
-        applyChanges: fromPromise<number, { actions: DefragAction[] }>(async ({ input }) => {
+        applyChanges: fromPromise<number, { actions: DefragAction[]; entries: EntryForDefrag[] }>(async ({ input }) => {
           if (overrides.applyError) throw new Error("applyChanges failed");
           return input.actions.length;
         }),
@@ -68,8 +68,8 @@ function createTestProviders(overrides: {
   };
 }
 
-function entry(id: string, title: string, body: string, tags: string[] = []): EntryForDefrag {
-  return { id, title, body, tags };
+function entry(id: string, title: string, body: string, tags: string[] = [], org = "default"): EntryForDefrag {
+  return { id, title, body, tags, org };
 }
 
 describe("defrag machine", () => {

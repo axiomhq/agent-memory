@@ -503,6 +503,7 @@ Some existing content without memory section.`;
           title: "old title",
           body: "some content about auth",
           tags: ["topic__auth"],
+          org: "default",
         },
       ];
 
@@ -521,7 +522,7 @@ Some existing content without memory section.`;
             async () => mockAgentOutput,
           ),
 
-          applyChanges: fromPromise<number, { actions: DefragAction[] }>(async ({ input }) => {
+          applyChanges: fromPromise<number, { actions: DefragAction[]; entries: EntryForDefrag[] }>(async ({ input }) => {
             let count = 0;
             for (const action of input.actions) {
               if (action.type === "rename") {
@@ -577,12 +578,14 @@ Some existing content without memory section.`;
           title: "important entry",
           body: "foundational",
           tags: [],
+          org: "default",
         },
         {
           id: id2,
           title: "other entry",
           body: "useful",
           tags: [],
+          org: "default",
         },
       ];
 
@@ -601,7 +604,7 @@ Some existing content without memory section.`;
             async () => mockAgentOutput,
           ),
 
-          applyChanges: fromPromise<number, { actions: DefragAction[] }>(async () => 0),
+          applyChanges: fromPromise<number, { actions: DefragAction[]; entries: EntryForDefrag[] }>(async () => 0),
 
           generateAgentsMd: fromPromise<
             void,
