@@ -13,6 +13,9 @@ interface EntrySummary {
   tags: string[];
   org: string;
   source: SourceKind;
+  tier: EntryTier;
+  classes: EntryClass[];
+  topics: TopicKind[];
   excerpt: string;
   createdAt: string | null;
   updatedAt: string | null;
@@ -26,27 +29,63 @@ type ApiEntry = {
   org: string;
   body: string;
   source: SourceKind;
+  tier: EntryTier;
+  classes: EntryClass[];
+  topics: TopicKind[];
+  contextHtml: string;
   summaryHtml: string;
-  keyPointsHtml: string;
+  operationalHtml: string;
   contentHtml: string;
+  appliesToHtml: string;
+  confidenceHtml: string;
+  commandsHtml: string;
   metadataHtml: string;
+  rawSourceHtml: string;
   createdAt: string | null;
   updatedAt: string | null;
   displayDate: string | null;
 };
 
-type SourceKind = "chatgpt" | "claude" | "codex" | "project-context" | "manual";
+type SourceKind = "chatgpt" | "claude" | "codex" | "project_context" | "manual" | "unknown";
+type EntryTier = "curated" | "raw_archive" | "unknown";
+type EntryView = "curated" | "candidates" | "raw" | "action" | "all";
+type EntryClass =
+  | "raw_import"
+  | "curated"
+  | "curated_candidate"
+  | "duplicate"
+  | "stale"
+  | "superseded"
+  | "action_required"
+  | "project_context";
+type TopicKind = "workpacker" | "agent_memory" | "mcp" | "github" | "ssen" | "infra";
 
 interface BrowserDerivedEntry {
   source: SourceKind;
+  tier: EntryTier;
+  classes: EntryClass[];
+  topics: TopicKind[];
   excerpt: string;
+  context: string;
   summary: string;
-  keyPoints: string;
+  operational: string;
   content: string;
+  commands: string;
+  appliesTo: string;
+  confidence: string;
   metadata: string;
+  rawSource: string;
   createdAt: string | null;
   updatedAt: string | null;
   displayDate: string | null;
+}
+
+interface StoreCounts {
+  curated: number;
+  candidates: number;
+  rawArchive: number;
+  actionRequired: number;
+  total: number;
 }
 
 function esc(value: string): string {
@@ -94,24 +133,85 @@ function normalizeSource(value: string): SourceKind | null {
   if (source.includes("claude") || source.includes("anthropic")) return "claude";
   if (source.includes("codex")) return "codex";
   if (
+    source.includes("project_context") ||
     source.includes("project-context") ||
     source.includes("markdown-context") ||
     source.includes("context-import") ||
     source.includes("document imported")
   ) {
-    return "project-context";
+    return "project_context";
   }
   if (source.includes("manual")) return "manual";
   return null;
 }
 
 function inferSource(tags: string[], body: string): SourceKind {
+  const sourceTag = tags.find((tag) => tag.startsWith("source__"))?.replace(/^source__/, "");
+  const fromSourceTag = sourceTag ? normalizeSource(sourceTag) : null;
+  const normalizedProvider = normalizedField(body, "Source").match(/provider:\s*([^\n]+)/i)?.[1];
   const providerMatch = body.match(/source_provider:\s*([^\n]+)/i);
   const sourceLine = body.match(/## Source\s+([\s\S]*?)(?:\n## |\n<details>|$)/i);
+  const fromNormalizedProvider = normalizedProvider ? normalizeSource(normalizedProvider) : null;
   const fromProvider = providerMatch ? normalizeSource(providerMatch[1] ?? "") : null;
   const fromSourceLine = sourceLine ? normalizeSource(sourceLine[1] ?? "") : null;
   const fromTags = normalizeSource(tags.join(" "));
-  return fromProvider ?? fromSourceLine ?? fromTags ?? "manual";
+  return fromSourceTag ?? fromNormalizedProvider ?? fromProvider ?? fromSourceLine ?? fromTags ?? "unknown";
+}
+
+function inferTier(tags: string[]): EntryTier {
+  if (tags.includes("tier__curated")) return "curated";
+  if (tags.includes("tier__raw_archive")) return "raw_archive";
+  if (tags.includes("curated")) return "curated";
+  return "unknown";
+}
+
+function inferClasses(tags: string[]): EntryClass[] {
+  const classes = tags
+    .filter((tag) => tag.startsWith("class__"))
+    .map((tag) => tag.replace(/^class__/, ""))
+    .filter((tag): tag is EntryClass =>
+      [
+        "raw_import",
+        "curated",
+        "curated_candidate",
+        "duplicate",
+        "stale",
+        "superseded",
+        "action_required",
+        "project_context",
+      ].includes(tag)
+    );
+  if (tags.includes("curated") && !classes.includes("curated")) classes.push("curated");
+  return [...new Set(classes)];
+}
+
+function inferTopics(tags: string[]): TopicKind[] {
+  return [...new Set(tags
+    .filter((tag) => tag.startsWith("topic__"))
+    .map((tag) => tag.replace(/^topic__/, ""))
+    .filter((tag): tag is TopicKind =>
+      ["workpacker", "agent_memory", "mcp", "github", "ssen", "infra"].includes(tag)
+    ))];
+}
+
+function countEntries(entries: Array<{ tags: string[] }>): StoreCounts {
+  return {
+    curated: entries.filter((entry) => inferTier(entry.tags) === "curated").length,
+    candidates: entries.filter((entry) => inferClasses(entry.tags).includes("curated_candidate")).length,
+    rawArchive: entries.filter((entry) => inferTier(entry.tags) === "raw_archive").length,
+    actionRequired: entries.filter((entry) => inferClasses(entry.tags).includes("action_required")).length,
+    total: entries.length,
+  };
+}
+
+function matchesView(tags: string[], view: EntryView): boolean {
+  const tier = inferTier(tags);
+  const classes = inferClasses(tags);
+  if (view === "curated") return tier === "curated";
+  if (view === "candidates") return classes.includes("curated_candidate");
+  if (view === "raw") return tier === "raw_archive";
+  if (view === "action") return classes.includes("action_required");
+  return true;
 }
 
 function parseDateValue(value: string): string | null {
@@ -146,13 +246,13 @@ function displayDate(value: string | null): string | null {
 
 function extractMarkdownSection(body: string, heading: string): string {
   const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = body.match(new RegExp(`^##\\s+${escapedHeading}\\s*$([\\s\\S]*?)(?=^##\\s+|^<details>|(?![\\s\\S]))`, "im"));
+  const match = body.match(new RegExp(`^##\\s+${escapedHeading}\\s*\\r?\\n([\\s\\S]*?)(?=^##\\s+|^<details>|$)`, "im"));
   return match?.[1]?.trim() ?? "";
 }
 
 function removeMarkdownSection(body: string, heading: string): string {
   const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return body.replace(new RegExp(`^##\\s+${escapedHeading}\\s*$[\\s\\S]*?(?=^##\\s+|^<details>|(?![\\s\\S]))`, "gim"), "").trim();
+  return body.replace(new RegExp(`^##\\s+${escapedHeading}\\s*\\r?\\n[\\s\\S]*?(?=^##\\s+|^<details>|$)`, "gim"), "").trim();
 }
 
 function extractDetailsBlock(body: string, summary: string): string {
@@ -178,6 +278,55 @@ function stripMigrationBoilerplate(body: string): string {
   return removeMarkdownSection(withoutLeadingTags, "Source");
 }
 
+const NORMALIZED_FIELDS = [
+  "Context",
+  "Type",
+  "Summary",
+  "Operational memory",
+  "Commands / config",
+  "Applies to",
+  "Source",
+  "Confidence",
+] as const;
+
+function normalizedField(body: string, field: (typeof NORMALIZED_FIELDS)[number]): string {
+  const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const nextFields = NORMALIZED_FIELDS
+    .filter((candidate) => candidate !== field)
+    .map((candidate) => candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+  const match = body.match(new RegExp(`^${escaped}:\\s*\\r?\\n([\\s\\S]*?)(?=^(?:${nextFields}):\\s*$|^<details>|$)`, "im"));
+  return match?.[1]?.trim() ?? "";
+}
+
+function rawContentDetails(body: string): string {
+  return extractDetailsBlock(body, "Raw content");
+}
+
+function stripRawContent(body: string): string {
+  return stripDetailsBlock(body, "Raw content");
+}
+
+function firstUsefulText(...values: string[]): string {
+  for (const value of values) {
+    const compact = compactText(value);
+    if (compact && !isPlaceholderSection(compact)) return compact;
+  }
+  return "";
+}
+
+function isPlaceholderSection(value: string): boolean {
+  const normalized = compactText(value)
+    .replace(/^[-*]\s+/, "")
+    .replace(/\.$/, "")
+    .toLowerCase();
+  return ["no compact summary extracted", "none captured", "not captured", "n/a", "none"].includes(normalized);
+}
+
+function usefulSection(value: string): string {
+  return isPlaceholderSection(value) ? "" : value;
+}
+
 function cleanDisplaySection(section: string): string {
   return section
     .split(/\r?\n/)
@@ -198,18 +347,34 @@ function cleanDisplaySection(section: string): string {
 
 function deriveBrowserEntry(tags: string[], body: string): BrowserDerivedEntry {
   const source = inferSource(tags, body);
-  const summary = cleanDisplaySection(extractMarkdownSection(body, "Summary"));
-  const keyPoints = cleanDisplaySection(extractMarkdownSection(body, "Key Points"));
-  const sourceSection = extractMarkdownSection(body, "Source");
+  const tier = inferTier(tags);
+  const classes = inferClasses(tags);
+  const topics = inferTopics(tags);
+  const context = usefulSection(cleanDisplaySection(normalizedField(body, "Context")));
+  const normalizedSummary = usefulSection(cleanDisplaySection(normalizedField(body, "Summary")));
+  const operational = usefulSection(cleanDisplaySection(normalizedField(body, "Operational memory")));
+  const commands = usefulSection(cleanDisplaySection(normalizedField(body, "Commands / config")));
+  const appliesTo = usefulSection(cleanDisplaySection(normalizedField(body, "Applies to")));
+  const confidence = usefulSection(cleanDisplaySection(normalizedField(body, "Confidence")));
+  const normalizedSource = cleanDisplaySection(normalizedField(body, "Source"));
+  const legacySummary = usefulSection(cleanDisplaySection(extractMarkdownSection(body, "Summary")));
+  const keyPoints = usefulSection(cleanDisplaySection(extractMarkdownSection(body, "Key Points")));
+  const summary = normalizedSummary || legacySummary;
+  const sourceSection = normalizedSource || extractMarkdownSection(body, "Source");
   const migrationMetadata = extractDetailsBlock(body, "Migration metadata");
+  const rawSource = rawContentDetails(body);
 
   let content = stripMigrationBoilerplate(body);
   content = removeMarkdownSection(content, "Summary");
   content = removeMarkdownSection(content, "Key Points");
   content = stripDetailsBlock(content, "Migration metadata");
+  content = stripRawContent(content);
+  for (const field of NORMALIZED_FIELDS) {
+    content = content.replace(new RegExp(`^${field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:\\s*\\r?\\n[\\s\\S]*?(?=^(?:${NORMALIZED_FIELDS.map((candidate) => candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")}):\\s*$|^<details>|$)`, "gim"), "").trim();
+  }
 
   const metadataParts = [
-    sourceSection ? `## Source\n\n${sourceSection}` : "",
+    sourceSection ? `## Provenance\n\n${sourceSection}` : "",
     migrationMetadata ? `## Migration metadata\n\n${detailsBlockContent(migrationMetadata)}` : "",
     extractMarkdownSection(body, "Migration metadata") ? `## Migration metadata\n\n${extractMarkdownSection(body, "Migration metadata")}` : "",
     extractMarkdownSection(body, "Raw provenance") ? `## Raw provenance\n\n${extractMarkdownSection(body, "Raw provenance")}` : "",
@@ -222,11 +387,19 @@ function deriveBrowserEntry(tags: string[], body: string): BrowserDerivedEntry {
 
   return {
     source,
-    excerpt: shorten(keyPoints || summary || content || body),
+    tier,
+    classes,
+    topics,
+    excerpt: shorten(firstUsefulText(summary, operational, context, keyPoints, content, body)),
+    context,
     summary,
-    keyPoints,
+    operational: operational || keyPoints,
+    commands,
+    appliesTo,
+    confidence,
     content: content.trim(),
     metadata: metadataParts.join("\n\n").trim(),
+    rawSource: rawSource ? detailsBlockContent(rawSource) : "",
     createdAt,
     updatedAt,
     displayDate: displayDate(bestDate),
@@ -523,6 +696,37 @@ function renderPage(baseUrl: string): string {
       line-height: 1;
     }
 
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(0,0,0,0.1);
+    }
+
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 9px 10px;
+      background: rgba(255,255,255,0.035);
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 1.06rem;
+      line-height: 1.1;
+    }
+
+    .stat span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
     .filter-chip[aria-pressed="true"] {
       color: #081019;
       border-color: transparent;
@@ -631,6 +835,33 @@ function renderPage(baseUrl: string): string {
 
     .reader-section {
       margin: 0 0 24px;
+    }
+
+    .curated-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      max-width: 1100px;
+    }
+
+    .memory-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      background: rgba(255,255,255,0.035);
+    }
+
+    .memory-card.full {
+      grid-column: 1 / -1;
+    }
+
+    .memory-card h4 {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
     .reader-section h4 {
@@ -792,6 +1023,10 @@ function renderPage(baseUrl: string): string {
       .textarea, .readonly {
         min-height: 320px;
       }
+
+      .stats, .curated-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -825,13 +1060,32 @@ function renderPage(baseUrl: string): string {
           <span class="chip accent" id="healthChip">online</span>
         </div>
         <div id="notice" class="notice" hidden></div>
+        <div class="filters" id="viewFilters">
+          <button class="filter-chip" data-view="curated" aria-pressed="false">curated</button>
+          <button class="filter-chip" data-view="candidates" aria-pressed="false">curated candidates</button>
+          <button class="filter-chip" data-view="raw" aria-pressed="false">raw archive</button>
+          <button class="filter-chip" data-view="action" aria-pressed="false">action required</button>
+          <button class="filter-chip" data-view="all" aria-pressed="false">all</button>
+        </div>
+        <div class="stats">
+          <div class="stat"><strong id="curatedCount">0</strong><span>curated</span></div>
+          <div class="stat"><strong id="candidateCount">0</strong><span>candidates</span></div>
+          <div class="stat"><strong id="rawCount">0</strong><span>raw archive</span></div>
+        </div>
         <div class="filters" id="sourceFilters">
           <button class="filter-chip" data-source="" aria-pressed="true">all</button>
           <button class="filter-chip" data-source="chatgpt" aria-pressed="false">chatgpt</button>
           <button class="filter-chip" data-source="claude" aria-pressed="false">claude</button>
           <button class="filter-chip" data-source="codex" aria-pressed="false">codex</button>
-          <button class="filter-chip" data-source="project-context" aria-pressed="false">project-context</button>
-          <button class="filter-chip" data-source="manual" aria-pressed="false">manual</button>
+          <button class="filter-chip" data-source="project_context" aria-pressed="false">project_context</button>
+        </div>
+        <div class="filters" id="topicFilters">
+          <button class="filter-chip" data-topic="" aria-pressed="true">all topics</button>
+          <button class="filter-chip" data-topic="workpacker" aria-pressed="false">workpacker</button>
+          <button class="filter-chip" data-topic="agent_memory" aria-pressed="false">agent-memory</button>
+          <button class="filter-chip" data-topic="mcp" aria-pressed="false">mcp</button>
+          <button class="filter-chip" data-topic="github" aria-pressed="false">github</button>
+          <button class="filter-chip" data-topic="ssen" aria-pressed="false">ssen</button>
         </div>
         <div id="list" class="list"></div>
       </section>
@@ -852,18 +1106,40 @@ function renderPage(baseUrl: string): string {
         </div>
 
         <div id="reader" class="reader">
-          <div id="summarySection" class="reader-section" hidden>
-            <h4>summary</h4>
-            <div id="summaryPreview" class="markdown"></div>
-          </div>
-          <div id="keyPointsSection" class="reader-section" hidden>
-            <h4>key points</h4>
-            <div id="keyPointsPreview" class="markdown"></div>
+          <div id="curatedReader" class="curated-grid" hidden>
+            <div class="memory-card full" id="contextCard" hidden>
+              <h4>context</h4>
+              <div id="contextPreview" class="markdown"></div>
+            </div>
+            <div class="memory-card" id="summaryCard" hidden>
+              <h4>summary</h4>
+              <div id="summaryPreview" class="markdown"></div>
+            </div>
+            <div class="memory-card" id="operationalCard" hidden>
+              <h4>operational memory</h4>
+              <div id="operationalPreview" class="markdown"></div>
+            </div>
+            <div class="memory-card" id="appliesCard" hidden>
+              <h4>applies to</h4>
+              <div id="appliesPreview" class="markdown"></div>
+            </div>
+            <div class="memory-card" id="confidenceCard" hidden>
+              <h4>confidence</h4>
+              <div id="confidencePreview" class="markdown"></div>
+            </div>
+            <div class="memory-card full" id="commandsCard" hidden>
+              <h4>commands / config</h4>
+              <div id="commandsPreview" class="markdown"></div>
+            </div>
           </div>
           <div id="contentPreview" class="markdown empty">select a memory from the library.</div>
           <details id="metadataSection" class="metadata" hidden>
-            <summary>metadata/source</summary>
+            <summary>provenance</summary>
             <div id="metadataPreview" class="markdown"></div>
+          </details>
+          <details id="rawSourceSection" class="metadata" hidden>
+            <summary>raw source</summary>
+            <div id="rawSourcePreview" class="markdown"></div>
           </details>
         </div>
 
@@ -916,8 +1192,13 @@ function renderPage(baseUrl: string): string {
       current: null,
       query: "",
       org: "",
+      view: "curated",
       source: "",
+      topic: "",
       editing: false,
+      metaLoaded: false,
+      counts: { curated: 0, candidates: 0, rawArchive: 0, actionRequired: 0, total: 0 },
+      rawSourceHtml: "",
     };
     let searchTimer = null;
 
@@ -936,6 +1217,7 @@ function renderPage(baseUrl: string): string {
       const visible = (tags || []).filter((tag) => ![
         "migrated_from_mac_agentmemory_v0917",
         "conversation_import",
+        "normalized",
       ].includes(tag));
       return visible.length ? visible.slice(0, 6).map((tag) => '<span class="chip">' + escapeHtml(tag) + '</span>').join(' ') : '<span class="small">no tags</span>';
     }
@@ -944,9 +1226,30 @@ function renderPage(baseUrl: string): string {
       return '<span class="chip source">' + escapeHtml(source || "manual") + '</span>';
     }
 
+    function topicChips(topics) {
+      return (topics || []).length
+        ? topics.map((topic) => '<span class="chip">' + escapeHtml(topic.replace("_", "-")) + '</span>').join(' ')
+        : '<span class="small">no topics</span>';
+    }
+
+    function classChips(entry) {
+      const chips = [];
+      if (entry.tier) chips.push('<span class="chip accent">' + escapeHtml(entry.tier.replace("_", " ")) + '</span>');
+      (entry.classes || []).filter((name) => ["curated_candidate", "action_required", "duplicate", "stale", "superseded"].includes(name)).forEach((name) => {
+        chips.push('<span class="chip warn">' + escapeHtml(name.replace("_", " ")) + '</span>');
+      });
+      return chips.join(' ');
+    }
+
     function updateFilterButtons() {
+      document.querySelectorAll("#viewFilters .filter-chip").forEach((button) => {
+        button.setAttribute("aria-pressed", button.dataset.view === state.view ? "true" : "false");
+      });
       document.querySelectorAll("#sourceFilters .filter-chip").forEach((button) => {
         button.setAttribute("aria-pressed", button.dataset.source === state.source ? "true" : "false");
+      });
+      document.querySelectorAll("#topicFilters .filter-chip").forEach((button) => {
+        button.setAttribute("aria-pressed", button.dataset.topic === state.topic ? "true" : "false");
       });
     }
 
@@ -994,19 +1297,30 @@ function renderPage(baseUrl: string): string {
       org.innerHTML = '<option value="">all orgs</option>' + meta.orgs.map((value) => '<option value="' + value + '">' + value + '</option>').join('');
       captureOrg.value = meta.defaultOrg || "default";
       org.value = state.org;
+      state.counts = meta.counts || state.counts;
+      if (!state.metaLoaded) {
+        state.view = state.counts.curated > 0 ? "curated" : "all";
+        state.metaLoaded = true;
+      }
+      updateFilterButtons();
       el("healthChip").textContent = meta.health.ok ? "healthy" : "needs attention";
-      el("countLabel").textContent = "Showing 0 of " + meta.count + " entries";
+      el("curatedCount").textContent = String(state.counts.curated || 0);
+      el("candidateCount").textContent = String(state.counts.candidates || 0);
+      el("rawCount").textContent = String(state.counts.rawArchive || 0);
+      el("countLabel").textContent = "Curated: " + (state.counts.curated || 0) + " · Candidates: " + (state.counts.candidates || 0) + " · Raw archive: " + (state.counts.rawArchive || 0);
     }
 
     async function loadList() {
       const params = new URLSearchParams();
       if (state.query) params.set("query", state.query);
       if (state.org) params.set("org", state.org);
+      if (state.view) params.set("view", state.view);
       if (state.source) params.set("source", state.source);
+      if (state.topic) params.set("topic", state.topic);
       params.set("limit", "500");
       const data = await request("/api/entries?" + params.toString());
       state.entries = data.entries;
-      el("countLabel").textContent = "Showing " + data.entries.length + " of " + data.total + " entries";
+      el("countLabel").textContent = "Showing " + data.entries.length + " of " + data.total + " entries · Curated: " + (state.counts.curated || 0) + " · Candidates: " + (state.counts.candidates || 0) + " · Raw archive: " + (state.counts.rawArchive || 0);
       renderList();
     }
 
@@ -1022,8 +1336,9 @@ function renderPage(baseUrl: string): string {
           '<p class="entry-title">' + escapeHtml(entry.title) + '</p>' +
           '<div class="entry-meta">' +
           sourceChip(entry.source) +
+          classChips(entry) +
           (entry.displayDate ? '<span>' + escapeHtml(entry.displayDate) + '</span>' : '') +
-          tagList(entry.tags) +
+          topicChips(entry.topics) +
           '</div>' +
           '<p class="entry-excerpt">' + escapeHtml(entry.excerpt) + '</p>' +
         '</button>';
@@ -1036,22 +1351,38 @@ function renderPage(baseUrl: string): string {
     function fillEditor(entry) {
       el("detailTitle").textContent = entry ? entry.title : "select a memory";
       el("detailMeta").innerHTML = entry
-        ? sourceChip(entry.source) + (entry.displayDate ? ' <span>' + escapeHtml(entry.displayDate) + '</span>' : '')
+        ? sourceChip(entry.source) + ' ' + classChips(entry) + (entry.displayDate ? ' <span>' + escapeHtml(entry.displayDate) + '</span>' : '')
         : "markdown files on disk";
-      el("detailTags").innerHTML = entry ? tagList(entry.tags) : "";
+      el("detailTags").innerHTML = entry ? topicChips(entry.topics) : "";
       el("detailId").textContent = entry ? entry.id + " · " + entry.org : "no entry selected";
       el("linkLine").innerHTML = entry ? "" : "";
       el("editTitle").value = entry ? entry.title : "";
       el("editTags").value = entry ? (entry.tags || []).join(", ") : "";
       el("editOrg").value = entry ? entry.org : "";
       el("editBody").value = entry ? entry.body : "";
+      const hasReadable = entry && (entry.contextHtml || entry.summaryHtml || entry.operationalHtml || entry.appliesToHtml || entry.confidenceHtml || entry.commandsHtml);
+      el("curatedReader").hidden = !hasReadable;
+      el("contextPreview").innerHTML = entry ? entry.contextHtml : "";
+      el("contextCard").hidden = !entry || !entry.contextHtml;
       el("summaryPreview").innerHTML = entry ? entry.summaryHtml : "";
-      el("summarySection").hidden = !entry || !entry.summaryHtml;
-      el("keyPointsPreview").innerHTML = entry ? entry.keyPointsHtml : "";
-      el("keyPointsSection").hidden = !entry || !entry.keyPointsHtml;
-      el("contentPreview").innerHTML = entry ? (entry.contentHtml || '<div class="empty">no previewable content.</div>') : "select a memory from the library.";
+      el("summaryCard").hidden = !entry || !entry.summaryHtml;
+      el("operationalPreview").innerHTML = entry ? entry.operationalHtml : "";
+      el("operationalCard").hidden = !entry || !entry.operationalHtml;
+      el("appliesPreview").innerHTML = entry ? entry.appliesToHtml : "";
+      el("appliesCard").hidden = !entry || !entry.appliesToHtml;
+      el("confidencePreview").innerHTML = entry ? entry.confidenceHtml : "";
+      el("confidenceCard").hidden = !entry || !entry.confidenceHtml;
+      el("commandsPreview").innerHTML = entry ? entry.commandsHtml : "";
+      el("commandsCard").hidden = !entry || !entry.commandsHtml;
+      el("contentPreview").innerHTML = entry && !hasReadable ? (entry.contentHtml || '<div class="empty">no previewable content.</div>') : "";
+      el("contentPreview").hidden = Boolean(hasReadable);
       el("metadataPreview").innerHTML = entry ? entry.metadataHtml : "";
       el("metadataSection").hidden = !entry || !entry.metadataHtml;
+      state.rawSourceHtml = entry ? entry.rawSourceHtml : "";
+      el("rawSourcePreview").innerHTML = "";
+      el("rawSourceSection").hidden = !state.rawSourceHtml;
+      el("rawSourceSection").open = false;
+      el("metadataSection").open = false;
       el("editEntry").disabled = !entry;
       el("deleteEntry").disabled = !entry;
       el("captureActions").hidden = true;
@@ -1128,7 +1459,8 @@ function renderPage(baseUrl: string): string {
     }
 
     async function refreshAll(selectedId = "") {
-      await Promise.all([loadMeta(), loadList()]);
+      await loadMeta();
+      await loadList();
       if (selectedId) {
         try {
           await openEntry(selectedId);
@@ -1152,12 +1484,38 @@ function renderPage(baseUrl: string): string {
       loadList().catch((error) => setNotice(error.message, "error"));
     });
 
-    document.querySelectorAll("#sourceFilters .filter-chip").forEach((button) => {
+    document.querySelectorAll("#viewFilters .filter-chip").forEach((button) => {
       button.addEventListener("click", () => {
-        state.source = button.dataset.source || "";
+        state.view = button.dataset.view || "all";
+        state.current = null;
+        fillEditor(null);
         updateFilterButtons();
         loadList().catch((error) => setNotice(error.message, "error"));
       });
+    });
+
+    document.querySelectorAll("#sourceFilters .filter-chip").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.source = button.dataset.source || "";
+        state.current = null;
+        fillEditor(null);
+        updateFilterButtons();
+        loadList().catch((error) => setNotice(error.message, "error"));
+      });
+    });
+
+    document.querySelectorAll("#topicFilters .filter-chip").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.topic = button.dataset.topic || "";
+        state.current = null;
+        fillEditor(null);
+        updateFilterButtons();
+        loadList().catch((error) => setNotice(error.message, "error"));
+      });
+    });
+
+    el("rawSourceSection").addEventListener("toggle", () => {
+      el("rawSourcePreview").innerHTML = el("rawSourceSection").open ? state.rawSourceHtml : "";
     });
 
     el("refresh").addEventListener("click", () => refreshAll(selectedId()).catch((error) => setNotice(error.message, "error")));
@@ -1230,11 +1588,13 @@ export async function run(args: string[]) {
         }
 
         const orgs = [...new Set(listResult.value.map((entry) => entry.org))].sort();
+        const counts = countEntries(listResult.value.map((entry) => ({ tags: entry.tags ?? [] })));
         return json({
           root: rootDir,
           defaultOrg: orgs[0] ?? "default",
           orgs,
           count: listResult.value.length,
+          counts,
           health: { ok: brokenResult.value.length === 0 },
         });
       }
@@ -1242,7 +1602,9 @@ export async function run(args: string[]) {
       if (request.method === "GET" && url.pathname === "/api/entries") {
         const query = url.searchParams.get("query") ?? undefined;
         const org = url.searchParams.get("org") ?? undefined;
+        const view = (url.searchParams.get("view") ?? "all") as EntryView;
         const source = url.searchParams.get("source") as SourceKind | null;
+        const topic = url.searchParams.get("topic") as TopicKind | null;
         const limit = Number.parseInt(url.searchParams.get("limit") ?? "500", 10);
         const result = await service.list({
           org: org || undefined,
@@ -1254,19 +1616,25 @@ export async function run(args: string[]) {
 
         const entries: EntrySummary[] = [];
         for (const entry of result.value) {
+          const tags = entry.tags ?? [];
+          if (!matchesView(tags, view)) continue;
           const readResult = await service.read(entry.id);
           const body = readResult.isOk() ? readResult.value.body : "";
-          const derived = deriveBrowserEntry(entry.tags ?? [], body);
-          const searchText = `${entry.title}\n${entry.tags.join(" ")}\n${body}`.toLowerCase();
+          const derived = deriveBrowserEntry(tags, body);
+          const searchText = `${entry.title}\n${tags.join(" ")}\n${derived.context}\n${derived.summary}\n${derived.operational}\n${derived.appliesTo}\n${derived.metadata}`.toLowerCase();
           if (query && !searchText.includes(query.toLowerCase())) continue;
           if (source && derived.source !== source) continue;
+          if (topic && !derived.topics.includes(topic)) continue;
 
           entries.push({
             id: entry.id,
             title: entry.title,
-            tags: entry.tags ?? [],
+            tags,
             org: entry.org,
             source: derived.source,
+            tier: derived.tier,
+            classes: derived.classes,
+            topics: derived.topics,
             excerpt: derived.excerpt,
             createdAt: derived.createdAt,
             updatedAt: derived.updatedAt,
@@ -1275,6 +1643,9 @@ export async function run(args: string[]) {
         }
 
         entries.sort((a, b) => {
+          const tierRank = (entry: EntrySummary) => entry.tier === "curated" ? 0 : entry.classes.includes("curated_candidate") ? 1 : 2;
+          const rankDelta = tierRank(a) - tierRank(b);
+          if (rankDelta !== 0) return rankDelta;
           const aDate = a.updatedAt ?? a.createdAt;
           const bDate = b.updatedAt ?? b.createdAt;
           if (aDate && bDate && aDate !== bDate) return bDate.localeCompare(aDate);
@@ -1301,10 +1672,18 @@ export async function run(args: string[]) {
             org: entryResult.value.meta.org,
             body: entryResult.value.body,
             source: derived.source,
+            tier: derived.tier,
+            classes: derived.classes,
+            topics: derived.topics,
+            contextHtml: renderMarkdown(derived.context),
             summaryHtml: renderMarkdown(derived.summary),
-            keyPointsHtml: renderMarkdown(derived.keyPoints),
+            operationalHtml: renderMarkdown(derived.operational),
             contentHtml: renderMarkdown(derived.content),
+            appliesToHtml: renderMarkdown(derived.appliesTo),
+            confidenceHtml: renderMarkdown(derived.confidence),
+            commandsHtml: renderMarkdown(derived.commands),
             metadataHtml: renderMarkdown(derived.metadata),
+            rawSourceHtml: renderMarkdown(derived.rawSource),
             createdAt: derived.createdAt,
             updatedAt: derived.updatedAt,
             displayDate: derived.displayDate,
