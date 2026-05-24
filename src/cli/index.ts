@@ -3,8 +3,6 @@
  * CLI entrypoint — routes commands to handlers.
  */
 
-import { parseArgs } from "util";
-
 const COMMANDS = [
   "capture",
   "consolidate",
@@ -12,6 +10,7 @@ const COMMANDS = [
   "list",
   "read",
   "doctor",
+  "mcp-server",
   "generate-agents-md",
   "install-cron",
   "uninstall-cron",
@@ -20,14 +19,9 @@ const COMMANDS = [
 type Command = (typeof COMMANDS)[number];
 
 async function main() {
-  const { positionals } = parseArgs({
-    args: Bun.argv.slice(2),
-    strict: false,
-    allowPositionals: true,
-  });
-
-  const command = positionals[0] as Command | undefined;
-  const args = positionals.slice(1);
+  const argv = Bun.argv.slice(2);
+  const command = argv[0] as Command | undefined;
+  const args = argv.slice(1);
 
   if (!command || !COMMANDS.includes(command as Command)) {
     console.error(`usage: memory <command> [options]`);
@@ -54,6 +48,9 @@ async function main() {
         break;
       case "doctor":
         await (await import("./doctor.js")).run(args);
+        break;
+      case "mcp-server":
+        await (await import("./mcp-server.js")).run(args);
         break;
       case "generate-agents-md":
         await (await import("./generate-agents-md.js")).run(args);
