@@ -73,6 +73,9 @@ bun run src/cli/index.ts generate-agents-md --org default
 
 # health check
 bun run src/cli/index.ts doctor
+
+# local browser ui
+bun run src/cli/index.ts web --host 127.0.0.1 --port 3333
 ```
 
 ## architecture

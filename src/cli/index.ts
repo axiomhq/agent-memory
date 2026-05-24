@@ -11,6 +11,7 @@ const COMMANDS = [
   "read",
   "doctor",
   "mcp-server",
+  "web",
   "generate-agents-md",
   "install-cron",
   "uninstall-cron",
@@ -51,6 +52,9 @@ async function main() {
         break;
       case "mcp-server":
         await (await import("./mcp-server.js")).run(args);
+        break;
+      case "web":
+        await (await import("./web.js")).run(args);
         break;
       case "generate-agents-md":
         await (await import("./generate-agents-md.js")).run(args);
