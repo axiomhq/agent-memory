@@ -2,6 +2,8 @@
  * memory web — lightweight local browser UI for browsing and editing memories.
  */
 
+import { existsSync, readFileSync, renameSync, writeFileSync } from "fs";
+import { join } from "path";
 import { parseArgs } from "util";
 import { loadConfig, expandPath } from "../config.js";
 import { createFileMemoryPersistenceAdapter } from "../persist/filesystem.js";
@@ -88,6 +90,31 @@ interface StoreCounts {
   total: number;
 }
 
+type TodoStatus = "open" | "doing" | "blocked" | "done" | "parked";
+type TodoPriority = "low" | "normal" | "high";
+
+interface TodoItem {
+  id: string;
+  title: string;
+  status: TodoStatus;
+  priority: TodoPriority;
+  sourceEntryId?: string;
+  sourceTitle?: string;
+  tags: string[];
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+
+interface TodoStore {
+  version: 1;
+  todos: TodoItem[];
+}
+
+const TODO_STATUSES: TodoStatus[] = ["open", "doing", "blocked", "done", "parked"];
+const TODO_PRIORITIES: TodoPriority[] = ["low", "normal", "high"];
+
 function esc(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -109,6 +136,75 @@ function text(data: string, init?: ResponseInit): Response {
     headers: { "content-type": "text/plain; charset=utf-8" },
     ...init,
   });
+}
+
+function todoStorePath(rootDir: string): string {
+  return join(rootDir, ".todos.json");
+}
+
+// TODO: suggest to-dos from class__action_required entries without mutating memories.
+// TODO: add an explicit sync boundary if to-do status should later update memory tags.
+// TODO: deduplicate generated to-dos by sourceEntryId when action extraction lands.
+
+function isTodoStatus(value: unknown): value is TodoStatus {
+  return typeof value === "string" && TODO_STATUSES.includes(value as TodoStatus);
+}
+
+function isTodoPriority(value: unknown): value is TodoPriority {
+  return typeof value === "string" && TODO_PRIORITIES.includes(value as TodoPriority);
+}
+
+function normalizeTags(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((tag): tag is string => typeof tag === "string").map((tag) => tag.trim()).filter(Boolean)
+    : [];
+}
+
+function readTodoStore(rootDir: string): TodoStore {
+  const path = todoStorePath(rootDir);
+  if (!existsSync(path)) return { version: 1, todos: [] };
+
+  const parsed = JSON.parse(readFileSync(path, "utf-8")) as unknown;
+  if (Array.isArray(parsed)) {
+    return { version: 1, todos: parsed.filter(isTodoItem) };
+  }
+  if (parsed && typeof parsed === "object" && (parsed as { version?: unknown }).version === 1) {
+    const todos = Array.isArray((parsed as { todos?: unknown }).todos)
+      ? (parsed as { todos: unknown[] }).todos.filter(isTodoItem)
+      : [];
+    return { version: 1, todos };
+  }
+  return { version: 1, todos: [] };
+}
+
+function writeTodoStore(rootDir: string, store: TodoStore): void {
+  const path = todoStorePath(rootDir);
+  const tempPath = `${path}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(tempPath, `${JSON.stringify(store, null, 2)}\n`, "utf-8");
+  renameSync(tempPath, path);
+}
+
+function isTodoItem(value: unknown): value is TodoItem {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<Record<keyof TodoItem, unknown>>;
+  return (
+    typeof item.id === "string" &&
+    typeof item.title === "string" &&
+    isTodoStatus(item.status) &&
+    isTodoPriority(item.priority) &&
+    Array.isArray(item.tags) &&
+    item.tags.every((tag) => typeof tag === "string") &&
+    typeof item.notes === "string" &&
+    typeof item.createdAt === "string" &&
+    typeof item.updatedAt === "string" &&
+    (item.completedAt === undefined || typeof item.completedAt === "string") &&
+    (item.sourceEntryId === undefined || typeof item.sourceEntryId === "string") &&
+    (item.sourceTitle === undefined || typeof item.sourceTitle === "string")
+  );
+}
+
+function makeTodoId(): string {
+  return `todo_${crypto.randomUUID().slice(0, 8)}`;
 }
 
 function compactText(body: string): string {
@@ -676,6 +772,12 @@ function renderPage(baseUrl: string): string {
       overflow: auto;
     }
 
+    .todo-list {
+      max-height: calc(100vh - 300px);
+      overflow: auto;
+      padding: 12px;
+    }
+
     .filters {
       display: flex;
       flex-wrap: wrap;
@@ -777,6 +879,82 @@ function renderPage(baseUrl: string): string {
       color: #b9c3d6;
       font-size: 0.9rem;
       line-height: 1.45;
+    }
+
+    .todo-create {
+      display: grid;
+      grid-template-columns: 1fr 108px auto;
+      gap: 8px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(0,0,0,0.1);
+    }
+
+    .todo-group {
+      margin: 0 0 14px;
+    }
+
+    .todo-group h4 {
+      margin: 4px 4px 8px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .todo-card {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      margin: 0 0 8px;
+      color: inherit;
+      background: rgba(255,255,255,0.035);
+      cursor: pointer;
+    }
+
+    .todo-card:hover {
+      background: rgba(255,255,255,0.055);
+    }
+
+    .todo-card[aria-selected="true"] {
+      border-color: rgba(126, 228, 195, 0.7);
+      background: rgba(126, 228, 195, 0.09);
+    }
+
+    .todo-title {
+      margin: 0 0 8px;
+      font-weight: 650;
+      line-height: 1.35;
+    }
+
+    .todo-detail {
+      padding: 22px;
+      overflow: auto;
+    }
+
+    .todo-form {
+      display: grid;
+      grid-template-columns: 1fr 150px 150px;
+      gap: 14px;
+      max-width: 980px;
+    }
+
+    .todo-form .wide {
+      grid-column: 1 / -1;
+    }
+
+    .source-link {
+      border: 0;
+      background: transparent;
+      color: var(--accent);
+      padding: 0;
+      cursor: pointer;
+      font: inherit;
+      text-align: left;
     }
 
     .chip {
@@ -1024,6 +1202,10 @@ function renderPage(baseUrl: string): string {
         min-height: 320px;
       }
 
+      .todo-create, .todo-form {
+        grid-template-columns: 1fr;
+      }
+
       .stats, .curated-grid {
         grid-template-columns: 1fr;
       }
@@ -1060,34 +1242,61 @@ function renderPage(baseUrl: string): string {
           <span class="chip accent" id="healthChip">online</span>
         </div>
         <div id="notice" class="notice" hidden></div>
-        <div class="filters" id="viewFilters">
-          <button class="filter-chip" data-view="curated" aria-pressed="false">curated</button>
-          <button class="filter-chip" data-view="candidates" aria-pressed="false">curated candidates</button>
-          <button class="filter-chip" data-view="raw" aria-pressed="false">raw archive</button>
-          <button class="filter-chip" data-view="action" aria-pressed="false">action required</button>
-          <button class="filter-chip" data-view="all" aria-pressed="false">all</button>
+        <div class="filters" id="modeFilters">
+          <button class="filter-chip" data-mode="memories" aria-pressed="true">memories</button>
+          <button class="filter-chip" data-mode="todos" aria-pressed="false">to-dos</button>
         </div>
-        <div class="stats">
-          <div class="stat"><strong id="curatedCount">0</strong><span>curated</span></div>
-          <div class="stat"><strong id="candidateCount">0</strong><span>candidates</span></div>
-          <div class="stat"><strong id="rawCount">0</strong><span>raw archive</span></div>
+        <div id="memoryLibrary">
+          <div class="filters" id="viewFilters">
+            <button class="filter-chip" data-view="curated" aria-pressed="false">curated</button>
+            <button class="filter-chip" data-view="candidates" aria-pressed="false">curated candidates</button>
+            <button class="filter-chip" data-view="raw" aria-pressed="false">raw archive</button>
+            <button class="filter-chip" data-view="action" aria-pressed="false">action required</button>
+            <button class="filter-chip" data-view="all" aria-pressed="false">all</button>
+          </div>
+          <div class="stats">
+            <div class="stat"><strong id="curatedCount">0</strong><span>curated</span></div>
+            <div class="stat"><strong id="candidateCount">0</strong><span>candidates</span></div>
+            <div class="stat"><strong id="rawCount">0</strong><span>raw archive</span></div>
+          </div>
+          <div class="filters" id="sourceFilters">
+            <button class="filter-chip" data-source="" aria-pressed="true">all</button>
+            <button class="filter-chip" data-source="chatgpt" aria-pressed="false">chatgpt</button>
+            <button class="filter-chip" data-source="claude" aria-pressed="false">claude</button>
+            <button class="filter-chip" data-source="codex" aria-pressed="false">codex</button>
+            <button class="filter-chip" data-source="project_context" aria-pressed="false">project_context</button>
+          </div>
+          <div class="filters" id="topicFilters">
+            <button class="filter-chip" data-topic="" aria-pressed="true">all topics</button>
+            <button class="filter-chip" data-topic="workpacker" aria-pressed="false">workpacker</button>
+            <button class="filter-chip" data-topic="agent_memory" aria-pressed="false">agent-memory</button>
+            <button class="filter-chip" data-topic="mcp" aria-pressed="false">mcp</button>
+            <button class="filter-chip" data-topic="github" aria-pressed="false">github</button>
+            <button class="filter-chip" data-topic="ssen" aria-pressed="false">ssen</button>
+          </div>
+          <div id="list" class="list"></div>
         </div>
-        <div class="filters" id="sourceFilters">
-          <button class="filter-chip" data-source="" aria-pressed="true">all</button>
-          <button class="filter-chip" data-source="chatgpt" aria-pressed="false">chatgpt</button>
-          <button class="filter-chip" data-source="claude" aria-pressed="false">claude</button>
-          <button class="filter-chip" data-source="codex" aria-pressed="false">codex</button>
-          <button class="filter-chip" data-source="project_context" aria-pressed="false">project_context</button>
+        <div id="todoLibrary" hidden>
+          <div class="filters" id="todoFilters">
+            <button class="filter-chip" data-todo-status="active" aria-pressed="true">active</button>
+            <button class="filter-chip" data-todo-status="open" aria-pressed="false">open</button>
+            <button class="filter-chip" data-todo-status="doing" aria-pressed="false">doing</button>
+            <button class="filter-chip" data-todo-status="blocked" aria-pressed="false">blocked</button>
+            <button class="filter-chip" data-todo-status="done" aria-pressed="false">done</button>
+            <button class="filter-chip" data-todo-status="parked" aria-pressed="false">parked</button>
+            <button class="filter-chip" data-todo-status="all" aria-pressed="false">all</button>
+          </div>
+          <div class="todo-create">
+            <input id="todoQuickTitle" class="field" placeholder="new to-do" />
+            <select id="todoQuickPriority" class="select">
+              <option value="normal">normal</option>
+              <option value="high">high</option>
+              <option value="low">low</option>
+            </select>
+            <button class="btn" id="todoQuickCreate">add</button>
+          </div>
+          <div id="todoList" class="todo-list"></div>
         </div>
-        <div class="filters" id="topicFilters">
-          <button class="filter-chip" data-topic="" aria-pressed="true">all topics</button>
-          <button class="filter-chip" data-topic="workpacker" aria-pressed="false">workpacker</button>
-          <button class="filter-chip" data-topic="agent_memory" aria-pressed="false">agent-memory</button>
-          <button class="filter-chip" data-topic="mcp" aria-pressed="false">mcp</button>
-          <button class="filter-chip" data-topic="github" aria-pressed="false">github</button>
-          <button class="filter-chip" data-topic="ssen" aria-pressed="false">ssen</button>
-        </div>
-        <div id="list" class="list"></div>
       </section>
 
       <section class="panel detail">
@@ -1100,8 +1309,52 @@ function renderPage(baseUrl: string): string {
             </div>
           </div>
           <div class="actions">
+            <button class="btn secondary" id="createTodoFromMemory" disabled>create to-do</button>
             <button class="btn secondary" id="editEntry" disabled>edit</button>
             <button class="btn secondary" id="deleteEntry" disabled>delete</button>
+          </div>
+        </div>
+
+        <div id="todoReader" class="todo-detail" hidden>
+          <div class="todo-form">
+            <div class="block wide">
+              <label for="todoTitle">title</label>
+              <input id="todoTitle" class="field" placeholder="task title" />
+            </div>
+            <div class="block">
+              <label for="todoStatus">status</label>
+              <select id="todoStatus" class="select">
+                <option value="open">open</option>
+                <option value="doing">doing</option>
+                <option value="blocked">blocked</option>
+                <option value="done">done</option>
+                <option value="parked">parked</option>
+              </select>
+            </div>
+            <div class="block">
+              <label for="todoPriority">priority</label>
+              <select id="todoPriority" class="select">
+                <option value="low">low</option>
+                <option value="normal">normal</option>
+                <option value="high">high</option>
+              </select>
+            </div>
+            <div class="block">
+              <label>source</label>
+              <div id="todoSource" class="subtle">none</div>
+            </div>
+            <div class="block wide">
+              <label for="todoTags">tags</label>
+              <input id="todoTags" class="field" placeholder="tag1, tag2" />
+            </div>
+            <div class="block wide">
+              <label for="todoNotes">notes</label>
+              <textarea id="todoNotes" class="textarea" placeholder="notes"></textarea>
+            </div>
+            <div class="actions wide">
+              <button class="btn" id="todoSave">save to-do</button>
+              <button class="btn danger" id="todoDelete">delete</button>
+            </div>
           </div>
         </div>
 
@@ -1188,13 +1441,17 @@ function renderPage(baseUrl: string): string {
 
   <script>
     const state = {
+      mode: "memories",
       entries: [],
       current: null,
+      todos: [],
+      currentTodo: null,
       query: "",
       org: "",
       view: "curated",
       source: "",
       topic: "",
+      todoFilter: "active",
       editing: false,
       metaLoaded: false,
       counts: { curated: 0, candidates: 0, rawArchive: 0, actionRequired: 0, total: 0 },
@@ -1241,7 +1498,16 @@ function renderPage(baseUrl: string): string {
       return chips.join(' ');
     }
 
+    function todoTags(tags) {
+      return (tags || []).length
+        ? tags.slice(0, 5).map((tag) => '<span class="chip">' + escapeHtml(tag) + '</span>').join(' ')
+        : "";
+    }
+
     function updateFilterButtons() {
+      document.querySelectorAll("#modeFilters .filter-chip").forEach((button) => {
+        button.setAttribute("aria-pressed", button.dataset.mode === state.mode ? "true" : "false");
+      });
       document.querySelectorAll("#viewFilters .filter-chip").forEach((button) => {
         button.setAttribute("aria-pressed", button.dataset.view === state.view ? "true" : "false");
       });
@@ -1251,13 +1517,37 @@ function renderPage(baseUrl: string): string {
       document.querySelectorAll("#topicFilters .filter-chip").forEach((button) => {
         button.setAttribute("aria-pressed", button.dataset.topic === state.topic ? "true" : "false");
       });
+      document.querySelectorAll("#todoFilters .filter-chip").forEach((button) => {
+        button.setAttribute("aria-pressed", button.dataset.todoStatus === state.todoFilter ? "true" : "false");
+      });
+    }
+
+    function setMode(mode) {
+      state.mode = mode;
+      const memoryMode = mode === "memories";
+      el("memoryLibrary").hidden = !memoryMode;
+      el("todoLibrary").hidden = memoryMode;
+      el("reader").hidden = !memoryMode || state.editing;
+      el("editor").hidden = memoryMode ? !state.editing : true;
+      el("todoReader").hidden = memoryMode || !state.currentTodo;
+      el("capturePanel").hidden = true;
+      el("captureActions").hidden = true;
+      el("saveDraft").disabled = !memoryMode || !state.editing || !state.current;
+      el("editEntry").hidden = !memoryMode;
+      el("deleteEntry").hidden = !memoryMode;
+      el("createTodoFromMemory").hidden = !memoryMode;
+      el("countLabel").textContent = memoryMode
+        ? "Showing " + state.entries.length + " entries · Curated: " + (state.counts.curated || 0) + " · Candidates: " + (state.counts.candidates || 0) + " · Raw archive: " + (state.counts.rawArchive || 0)
+        : "Showing " + filteredTodos().length + " of " + state.todos.length + " to-dos";
+      if (!memoryMode && !state.currentTodo) fillTodo(null);
+      updateFilterButtons();
     }
 
     function setEditMode(enabled) {
       state.editing = enabled && Boolean(state.current);
-      el("reader").hidden = state.editing;
-      el("editor").hidden = !state.editing;
-      el("saveDraft").disabled = !state.editing || !state.current;
+      el("reader").hidden = state.mode !== "memories" || state.editing;
+      el("editor").hidden = state.mode !== "memories" || !state.editing;
+      el("saveDraft").disabled = state.mode !== "memories" || !state.editing || !state.current;
       el("editEntry").textContent = state.editing ? "preview" : "edit";
     }
 
@@ -1324,6 +1614,101 @@ function renderPage(baseUrl: string): string {
       renderList();
     }
 
+    async function loadTodos(selectedId = "") {
+      const data = await request("/api/todos");
+      state.todos = data.todos || [];
+      if (selectedId) {
+        state.currentTodo = state.todos.find((todo) => todo.id === selectedId) || null;
+      } else if (state.currentTodo) {
+        state.currentTodo = state.todos.find((todo) => todo.id === state.currentTodo.id) || null;
+      }
+      renderTodos();
+      fillTodo(state.currentTodo);
+      if (state.mode === "todos") setMode("todos");
+    }
+
+    function filteredTodos() {
+      if (state.todoFilter === "all") return state.todos;
+      if (state.todoFilter === "active") return state.todos.filter((todo) => !["done", "parked"].includes(todo.status));
+      return state.todos.filter((todo) => todo.status === state.todoFilter);
+    }
+
+    function todoRank(todo) {
+      const statusRank = { doing: 0, open: 1, blocked: 2, parked: 3, done: 4 };
+      const priorityRank = { high: 0, normal: 1, low: 2 };
+      return [statusRank[todo.status] ?? 9, priorityRank[todo.priority] ?? 9, todo.updatedAt || ""];
+    }
+
+    function renderTodos() {
+      const list = el("todoList");
+      const todos = filteredTodos().slice().sort((a, b) => {
+        const aRank = todoRank(a);
+        const bRank = todoRank(b);
+        if (aRank[0] !== bRank[0]) return aRank[0] - bRank[0];
+        if (aRank[1] !== bRank[1]) return aRank[1] - bRank[1];
+        return String(bRank[2]).localeCompare(String(aRank[2]));
+      });
+      if (!todos.length) {
+        list.innerHTML = '<div class="empty">no to-dos match the current filter.</div>';
+        return;
+      }
+      const groups = ["doing", "open", "blocked", "parked", "done"];
+      list.innerHTML = groups.map((status) => {
+        const items = todos.filter((todo) => todo.status === status);
+        if (!items.length) return "";
+        return '<div class="todo-group"><h4>' + status + '</h4>' + items.map((todo) => {
+          const selected = state.currentTodo && state.currentTodo.id === todo.id;
+          const source = todo.sourceEntryId
+            ? '<span class="small">source: ' + escapeHtml(todo.sourceTitle || todo.sourceEntryId) + '</span>'
+            : '';
+          return '<button class="todo-card" data-id="' + escapeHtml(todo.id) + '" aria-selected="' + selected + '">' +
+            '<p class="todo-title">' + escapeHtml(todo.title) + '</p>' +
+            '<div class="entry-meta">' +
+            '<span class="chip accent">' + escapeHtml(todo.status) + '</span>' +
+            '<span class="chip">' + escapeHtml(todo.priority) + '</span>' +
+            todoTags(todo.tags) +
+            source +
+            '</div>' +
+          '</button>';
+        }).join("") + '</div>';
+      }).join("");
+      list.querySelectorAll(".todo-card").forEach((button) => {
+        button.addEventListener("click", () => openTodo(button.dataset.id));
+      });
+    }
+
+    function fillTodo(todo) {
+      el("detailTitle").textContent = todo ? todo.title : "select a to-do";
+      el("detailMeta").innerHTML = todo
+        ? '<span class="chip accent">' + escapeHtml(todo.status) + '</span> <span class="chip">' + escapeHtml(todo.priority) + '</span>'
+        : "local task state";
+      el("detailTags").innerHTML = todo ? todoTags(todo.tags) : "";
+      el("detailId").textContent = todo ? todo.id : "no to-do selected";
+      el("linkLine").textContent = "";
+      el("todoTitle").value = todo ? todo.title : "";
+      el("todoStatus").value = todo ? todo.status : "open";
+      el("todoPriority").value = todo ? todo.priority : "normal";
+      el("todoTags").value = todo ? (todo.tags || []).join(", ") : "";
+      el("todoNotes").value = todo ? todo.notes : "";
+      el("todoSource").innerHTML = todo && todo.sourceEntryId
+        ? '<button class="source-link" id="todoSourceOpen">' + escapeHtml(todo.sourceTitle || todo.sourceEntryId) + '</button>'
+        : '<span class="small">none</span>';
+      el("todoReader").hidden = state.mode !== "todos" || !todo;
+      el("todoSave").disabled = !todo;
+      el("todoDelete").disabled = !todo;
+      const sourceButton = el("todoSourceOpen");
+      if (sourceButton && todo && todo.sourceEntryId) {
+        sourceButton.addEventListener("click", () => openTodoSource(todo.sourceEntryId));
+      }
+    }
+
+    function openTodo(id) {
+      state.currentTodo = state.todos.find((todo) => todo.id === id) || null;
+      fillTodo(state.currentTodo);
+      renderTodos();
+      setMode("todos");
+    }
+
     function renderList() {
       const list = el("list");
       if (!state.entries.length) {
@@ -1385,6 +1770,7 @@ function renderPage(baseUrl: string): string {
       el("metadataSection").open = false;
       el("editEntry").disabled = !entry;
       el("deleteEntry").disabled = !entry;
+      el("createTodoFromMemory").disabled = !entry;
       el("captureActions").hidden = true;
       if (!entry) setEditMode(false);
     }
@@ -1458,9 +1844,94 @@ function renderPage(baseUrl: string): string {
       await refreshAll();
     }
 
+    async function createQuickTodo() {
+      const title = el("todoQuickTitle").value.trim();
+      if (!title) {
+        setNotice("to-do title is empty.", "error");
+        return;
+      }
+      const result = await request("/api/todos", {
+        method: "POST",
+        body: JSON.stringify({
+          title,
+          priority: el("todoQuickPriority").value,
+          status: "open",
+          tags: [],
+          notes: "",
+        }),
+      });
+      el("todoQuickTitle").value = "";
+      setNotice("created " + result.todo.id);
+      await loadTodos(result.todo.id);
+    }
+
+    async function createTodoFromMemory() {
+      if (!state.current) return;
+      const result = await request("/api/todos", {
+        method: "POST",
+        body: JSON.stringify({
+          title: state.current.title,
+          priority: "normal",
+          status: "open",
+          sourceEntryId: state.current.id,
+          sourceTitle: state.current.title,
+          tags: state.current.tags || [],
+          notes: "Created from memory " + state.current.id + ". Review source before acting.",
+        }),
+      });
+      state.currentTodo = result.todo;
+      setNotice("created to-do " + result.todo.id);
+      await loadTodos(result.todo.id);
+      setMode("todos");
+    }
+
+    async function saveTodo() {
+      if (!state.currentTodo) return;
+      const result = await request("/api/todos/" + encodeURIComponent(state.currentTodo.id), {
+        method: "PATCH",
+        body: JSON.stringify({
+          title: el("todoTitle").value.trim(),
+          status: el("todoStatus").value,
+          priority: el("todoPriority").value,
+          tags: el("todoTags").value.split(",").map((tag) => tag.trim()).filter(Boolean),
+          notes: el("todoNotes").value,
+        }),
+      });
+      setNotice("saved " + result.todo.id);
+      await loadTodos(result.todo.id);
+    }
+
+    async function deleteTodo() {
+      if (!state.currentTodo) return;
+      if (!confirm("delete " + state.currentTodo.title + "?")) return;
+      await request("/api/todos/" + encodeURIComponent(state.currentTodo.id), { method: "DELETE" });
+      setNotice("deleted " + state.currentTodo.id);
+      state.currentTodo = null;
+      await loadTodos();
+      fillTodo(null);
+    }
+
+    async function openTodoSource(sourceEntryId) {
+      try {
+        state.query = "";
+        state.org = "";
+        state.source = "";
+        state.topic = "";
+        state.view = "all";
+        setMode("memories");
+        await loadMeta();
+        await loadList();
+        await openEntry(sourceEntryId);
+      } catch {
+        setNotice("source memory missing: " + sourceEntryId, "error");
+        setMode("todos");
+      }
+    }
+
     async function refreshAll(selectedId = "") {
       await loadMeta();
       await loadList();
+      await loadTodos();
       if (selectedId) {
         try {
           await openEntry(selectedId);
@@ -1482,6 +1953,16 @@ function renderPage(baseUrl: string): string {
     el("org").addEventListener("change", (event) => {
       state.org = event.target.value;
       loadList().catch((error) => setNotice(error.message, "error"));
+    });
+
+    document.querySelectorAll("#modeFilters .filter-chip").forEach((button) => {
+      button.addEventListener("click", () => {
+        const mode = button.dataset.mode || "memories";
+        setMode(mode);
+        if (mode === "todos") {
+          loadTodos().catch((error) => setNotice(error.message, "error"));
+        }
+      });
     });
 
     document.querySelectorAll("#viewFilters .filter-chip").forEach((button) => {
@@ -1514,13 +1995,31 @@ function renderPage(baseUrl: string): string {
       });
     });
 
+    document.querySelectorAll("#todoFilters .filter-chip").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.todoFilter = button.dataset.todoStatus || "active";
+        updateFilterButtons();
+        renderTodos();
+        setMode("todos");
+      });
+    });
+
     el("rawSourceSection").addEventListener("toggle", () => {
       el("rawSourcePreview").innerHTML = el("rawSourceSection").open ? state.rawSourceHtml : "";
     });
 
     el("refresh").addEventListener("click", () => refreshAll(selectedId()).catch((error) => setNotice(error.message, "error")));
     el("editEntry").addEventListener("click", () => setEditMode(!state.editing));
+    el("createTodoFromMemory").addEventListener("click", () => createTodoFromMemory().catch((error) => setNotice(error.message, "error")));
+    el("todoQuickCreate").addEventListener("click", () => createQuickTodo().catch((error) => setNotice(error.message, "error")));
+    el("todoQuickTitle").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") createQuickTodo().catch((error) => setNotice(error.message, "error"));
+    });
+    el("todoSave").addEventListener("click", () => saveTodo().catch((error) => setNotice(error.message, "error")));
+    el("todoStatus").addEventListener("change", () => saveTodo().catch((error) => setNotice(error.message, "error")));
+    el("todoDelete").addEventListener("click", () => deleteTodo().catch((error) => setNotice(error.message, "error")));
     el("newEntry").addEventListener("click", () => {
+      setMode("memories");
       state.current = null;
       fillEditor(null);
       el("editor").hidden = false;
@@ -1597,6 +2096,108 @@ export async function run(args: string[]) {
           counts,
           health: { ok: brokenResult.value.length === 0 },
         });
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/todos") {
+        try {
+          const store = readTodoStore(rootDir);
+          return json({ path: todoStorePath(rootDir), version: store.version, todos: store.todos });
+        } catch (error) {
+          return json({ error: error instanceof Error ? error.message : "failed to read to-dos" }, { status: 500 });
+        }
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/todos") {
+        const payload = await request.json().catch(() => null);
+        if (!payload || typeof payload !== "object") {
+          return json({ error: "invalid JSON body" }, { status: 400 });
+        }
+
+        const data = payload as Record<string, unknown>;
+        const title = typeof data.title === "string" ? data.title.trim() : "";
+        if (!title) return json({ error: "title is required" }, { status: 400 });
+
+        const now = new Date().toISOString();
+        const status = isTodoStatus(data.status) ? data.status : "open";
+        const todo: TodoItem = {
+          id: makeTodoId(),
+          title,
+          status,
+          priority: isTodoPriority(data.priority) ? data.priority : "normal",
+          sourceEntryId: typeof data.sourceEntryId === "string" && data.sourceEntryId.trim() ? data.sourceEntryId.trim() : undefined,
+          sourceTitle: typeof data.sourceTitle === "string" && data.sourceTitle.trim() ? data.sourceTitle.trim() : undefined,
+          tags: normalizeTags(data.tags),
+          notes: typeof data.notes === "string" ? data.notes : "",
+          createdAt: now,
+          updatedAt: now,
+          completedAt: status === "done" ? now : undefined,
+        };
+
+        try {
+          const store = readTodoStore(rootDir);
+          store.todos.push(todo);
+          writeTodoStore(rootDir, store);
+          return json({ todo }, { status: 201 });
+        } catch (error) {
+          return json({ error: error instanceof Error ? error.message : "failed to write to-dos" }, { status: 500 });
+        }
+      }
+
+      if (request.method === "PATCH" && url.pathname.startsWith("/api/todos/")) {
+        const id = decodeURIComponent(url.pathname.slice("/api/todos/".length));
+        const payload = await request.json().catch(() => null);
+        if (!payload || typeof payload !== "object") {
+          return json({ error: "invalid JSON body" }, { status: 400 });
+        }
+
+        try {
+          const store = readTodoStore(rootDir);
+          const index = store.todos.findIndex((todo) => todo.id === id);
+          if (index < 0) return json({ error: "to-do not found" }, { status: 404 });
+
+          const data = payload as Record<string, unknown>;
+          const existing = store.todos[index];
+          if (!existing) return json({ error: "to-do not found" }, { status: 404 });
+          const nextStatus = data.status === undefined ? existing.status : isTodoStatus(data.status) ? data.status : null;
+          const nextPriority = data.priority === undefined ? existing.priority : isTodoPriority(data.priority) ? data.priority : null;
+          if (!nextStatus) return json({ error: "invalid status" }, { status: 400 });
+          if (!nextPriority) return json({ error: "invalid priority" }, { status: 400 });
+
+          const title = data.title === undefined ? existing.title : typeof data.title === "string" ? data.title.trim() : "";
+          if (!title) return json({ error: "title is required" }, { status: 400 });
+
+          const now = new Date().toISOString();
+          const updated: TodoItem = {
+            ...existing,
+            title,
+            status: nextStatus,
+            priority: nextPriority,
+            sourceEntryId: data.sourceEntryId === undefined ? existing.sourceEntryId : typeof data.sourceEntryId === "string" && data.sourceEntryId.trim() ? data.sourceEntryId.trim() : undefined,
+            sourceTitle: data.sourceTitle === undefined ? existing.sourceTitle : typeof data.sourceTitle === "string" && data.sourceTitle.trim() ? data.sourceTitle.trim() : undefined,
+            tags: data.tags === undefined ? existing.tags : normalizeTags(data.tags),
+            notes: data.notes === undefined ? existing.notes : typeof data.notes === "string" ? data.notes : existing.notes,
+            updatedAt: now,
+            completedAt: nextStatus === "done" ? existing.completedAt ?? now : undefined,
+          };
+          store.todos[index] = updated;
+          writeTodoStore(rootDir, store);
+          return json({ todo: updated });
+        } catch (error) {
+          return json({ error: error instanceof Error ? error.message : "failed to update to-do" }, { status: 500 });
+        }
+      }
+
+      if (request.method === "DELETE" && url.pathname.startsWith("/api/todos/")) {
+        const id = decodeURIComponent(url.pathname.slice("/api/todos/".length));
+        try {
+          const store = readTodoStore(rootDir);
+          const nextTodos = store.todos.filter((todo) => todo.id !== id);
+          if (nextTodos.length === store.todos.length) return json({ error: "to-do not found" }, { status: 404 });
+          writeTodoStore(rootDir, { ...store, todos: nextTodos });
+          return text("deleted");
+        } catch (error) {
+          return json({ error: error instanceof Error ? error.message : "failed to delete to-do" }, { status: 500 });
+        }
       }
 
       if (request.method === "GET" && url.pathname === "/api/entries") {
