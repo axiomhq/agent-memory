@@ -1,0 +1,42 @@
+# dependencies
+node_modules/
+
+# generated package-manager state
+bun.lock
+
+# exports and migration bundles
+exports/
+export/
+migration-bundles/
+migration_bundle/
+*migration-bundle*
+*migration_bundle*
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+
+# backups
+backups/
+backup/
+*.bak
+*.backup
+
+# logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+bun-debug.log*
+
+# local environment
+.env
+.env.*
+!.env.example
+
+# local launchers and scratch state
+/memory
+.agent-memory/
+.agents/
+.codex/
