@@ -15,6 +15,9 @@ export async function run(args: string[]) {
       title: { type: "string", short: "t" },
       body: { type: "string", short: "b" },
       tags: { type: "string", short: "g", multiple: true },
+      subject: { type: "string" },
+      content: { type: "string" },
+      tag: { type: "string", multiple: true },
       harness: { type: "string", default: "manual" },
       "thread-id": { type: "string" },
       "session-path": { type: "string" },
@@ -24,7 +27,10 @@ export async function run(args: string[]) {
     strict: true,
   });
 
-  if (!values.title || !values.body) {
+  const subject = values.subject ?? values.title;
+  const content = values.content ?? values.body;
+
+  if (!subject || !content) {
     console.error("usage: memory capture --title <title> --body <body> [--tags <tag>...] [--harness <amp|pi|codex|manual>] [--thread-id <id>] [--session-path <path>]");
     process.exit(1);
   }
@@ -40,7 +46,7 @@ export async function run(args: string[]) {
       ? { method: "amp-thread" as const, threadId: values["thread-id"] }
       : values["session-path"]
         ? { method: "pi-session" as const, sessionPath: values["session-path"] }
-        : { method: "file" as const, content: values.body! },
+        : { method: "file" as const, content },
     context: {
       cwd: values.cwd ?? process.cwd(),
       ...(values.repo ? { repo: values.repo } : {}),
