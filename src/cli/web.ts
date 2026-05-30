@@ -8,6 +8,7 @@ import { parseArgs } from "util";
 import { loadConfig, expandPath } from "../config.js";
 import { createFileMemoryPersistenceAdapter } from "../persist/filesystem.js";
 import { createMemoryService } from "../service.js";
+import { esc, renderMarkdown, renderInlineMarkdown } from "../web/markdown.js";
 
 interface EntrySummary {
   id: string;
@@ -127,14 +128,6 @@ interface LandingMemory {
 const TODO_STATUSES: TodoStatus[] = ["open", "doing", "blocked", "done", "parked"];
 const TODO_PRIORITIES: TodoPriority[] = ["low", "normal", "high"];
 
-function esc(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
 
 function json(data: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(data), {
@@ -554,85 +547,6 @@ function deriveBrowserEntry(tags: string[], body: string): BrowserDerivedEntry {
   };
 }
 
-function renderInlineMarkdown(value: string): string {
-  return esc(value)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>')
-    .replace(/\[\[([^\]]+)\]\]/g, "<code>[[$1]]</code>");
-}
-
-function renderMarkdown(markdown: string): string {
-  const lines = markdown.trim().split(/\r?\n/);
-  const html: string[] = [];
-  let inCode = false;
-  let inList = false;
-  let paragraph: string[] = [];
-
-  const flushParagraph = () => {
-    if (paragraph.length === 0) return;
-    html.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
-    paragraph = [];
-  };
-  const closeList = () => {
-    if (!inList) return;
-    html.push("</ul>");
-    inList = false;
-  };
-
-  for (const line of lines) {
-    if (line.startsWith("```")) {
-      flushParagraph();
-      closeList();
-      if (inCode) {
-        html.push("</code></pre>");
-        inCode = false;
-      } else {
-        html.push("<pre><code>");
-        inCode = true;
-      }
-      continue;
-    }
-
-    if (inCode) {
-      html.push(`${esc(line)}\n`);
-      continue;
-    }
-
-    if (!line.trim()) {
-      flushParagraph();
-      closeList();
-      continue;
-    }
-
-    const heading = line.match(/^(#{1,4})\s+(.+)$/);
-    if (heading) {
-      flushParagraph();
-      closeList();
-      const level = Math.min(heading[1]?.length ?? 2, 4);
-      html.push(`<h${level}>${renderInlineMarkdown(heading[2] ?? "")}</h${level}>`);
-      continue;
-    }
-
-    const bullet = line.match(/^\s*[-*]\s+(.+)$/);
-    if (bullet) {
-      flushParagraph();
-      if (!inList) {
-        html.push("<ul>");
-        inList = true;
-      }
-      html.push(`<li>${renderInlineMarkdown(bullet[1] ?? "")}</li>`);
-      continue;
-    }
-
-    paragraph.push(line.trim());
-  }
-
-  flushParagraph();
-  closeList();
-  if (inCode) html.push("</code></pre>");
-  return html.join("\n");
-}
 
 function renderTagList(tags: string[], limit = 5): string {
   const visible = tags
