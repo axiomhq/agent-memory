@@ -1940,13 +1940,16 @@ function renderPage(baseUrl: string): string {
       const params = new URLSearchParams();
       if (state.query) params.set("query", state.query);
       if (state.org) params.set("org", state.org);
-      if (state.view) params.set("view", state.view);
+      if (state.view === "curated") params.set("tier", "curated");
+      else if (state.view === "raw") params.set("tier", "raw_archive");
+      else if (state.view === "candidates") params.set("class", "curated_candidate");
+      else if (state.view === "action") params.set("class", "action_required");
       if (state.source) params.set("source", state.source);
       if (state.topic) params.set("topic", state.topic);
       params.set("limit", "500");
-      const data = await request("/api/entries?" + params.toString());
-      state.entries = data.entries;
-      el("countLabel").textContent = "Showing " + data.entries.length + " of " + data.total + " entries · Curated: " + (state.counts.curated || 0) + " · Candidates: " + (state.counts.candidates || 0) + " · Raw archive: " + (state.counts.rawArchive || 0);
+      const data = await request("/api/memories?" + params.toString());
+      state.entries = data.memories || [];
+      el("countLabel").textContent = "Showing " + (data.memories || []).length + " of " + data.total + " entries · Curated: " + (state.counts.curated || 0) + " · Candidates: " + (state.counts.candidates || 0) + " · Raw archive: " + (state.counts.rawArchive || 0);
       renderList();
     }
 
@@ -2113,8 +2116,8 @@ function renderPage(baseUrl: string): string {
 
     async function openEntry(id) {
       if (!id) return;
-      const data = await request("/api/entries/" + encodeURIComponent(id));
-      state.current = data.entry;
+      const data = await request("/api/memories/" + encodeURIComponent(id));
+      state.current = data.memory;
       fillEditor(state.current);
       setEditMode(false);
       el("capturePanel").hidden = true;
@@ -2134,7 +2137,7 @@ function renderPage(baseUrl: string): string {
         tags: el("editTags").value.split(",").map((tag) => tag.trim()).filter(Boolean),
         org: el("editOrg").value.trim() || "default",
       };
-      await request("/api/entries/" + encodeURIComponent(id), {
+      await request("/api/memories/" + encodeURIComponent(id), {
         method: "PUT",
         body: JSON.stringify(payload),
       });
@@ -2156,21 +2159,21 @@ function renderPage(baseUrl: string): string {
         tags: el("editTags").value.split(",").map((tag) => tag.trim()).filter(Boolean),
         org: el("captureOrg").value.trim() || "default",
       };
-      const result = await request("/api/entries", {
+      const result = await request("/api/memories", {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      setNotice("captured " + result.entry.meta.id);
+      setNotice("captured " + result.memory.meta.id);
       el("captureBody").value = "";
       el("capturePanel").hidden = true;
       el("captureActions").hidden = true;
-      await refreshAll(result.entry.meta.id);
+      await refreshAll(result.memory.meta.id);
     }
 
     async function deleteCurrent() {
       if (!state.current) return;
       if (!confirm("delete " + state.current.title + "?")) return;
-      await request("/api/entries/" + encodeURIComponent(state.current.id), {
+      await request("/api/memories/" + encodeURIComponent(state.current.id), {
         method: "DELETE",
       });
       setNotice("deleted " + state.current.id);
