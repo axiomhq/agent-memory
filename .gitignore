@@ -40,3 +40,9 @@ bun-debug.log*
 .agent-memory/
 .agents/
 .codex/
+.gstack/
+
+# local dev scaffolding (web redesign)
+_fixture-store/
+memory.config.json
+_sunny-backup/
