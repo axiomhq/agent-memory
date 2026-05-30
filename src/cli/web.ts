@@ -90,6 +90,11 @@ interface StoreCounts {
   total: number;
 }
 
+interface LandingStats extends StoreCounts {
+  todoActive: number;
+  todoDone: number;
+}
+
 type TodoStatus = "open" | "doing" | "blocked" | "done" | "parked";
 type TodoPriority = "low" | "normal" | "high";
 
@@ -110,6 +115,13 @@ interface TodoItem {
 interface TodoStore {
   version: 1;
   todos: TodoItem[];
+}
+
+interface LandingMemory {
+  id: string;
+  title: string;
+  tags: string[];
+  displayDate: string | null;
 }
 
 const TODO_STATUSES: TodoStatus[] = ["open", "doing", "blocked", "done", "parked"];
@@ -175,6 +187,46 @@ function readTodoStore(rootDir: string): TodoStore {
     return { version: 1, todos };
   }
   return { version: 1, todos: [] };
+}
+
+function todoIsActive(todo: TodoItem): boolean {
+  return todo.status !== "done" && todo.status !== "parked";
+}
+
+function todoDisplayPriority(priority: TodoPriority): "high" | "medium" | "low" {
+  return priority === "normal" ? "medium" : priority;
+}
+
+function priorityRank(priority: TodoPriority): number {
+  if (priority === "high") return 0;
+  if (priority === "normal") return 1;
+  return 2;
+}
+
+function sortTodosForLanding(todos: TodoItem[]): TodoItem[] {
+  return [...todos].sort((a, b) => {
+    const priorityDelta = priorityRank(a.priority) - priorityRank(b.priority);
+    if (priorityDelta !== 0) return priorityDelta;
+    return b.updatedAt.localeCompare(a.updatedAt);
+  });
+}
+
+function filterTodos(todos: TodoItem[], status: string | null): TodoItem[] {
+  if (!status || status === "active") return todos.filter(todoIsActive);
+  if (status === "all") return todos;
+  if (status === "done") return todos.filter((todo) => todo.status === "done");
+  if (isTodoStatus(status)) return todos.filter((todo) => todo.status === status);
+  return todos.filter(todoIsActive);
+}
+
+function todoStats(todos: TodoItem[]) {
+  const active = todos.filter(todoIsActive).length;
+  const done = todos.filter((todo) => todo.status === "done").length;
+  return { active, done, total: todos.length };
+}
+
+function appendTag(tags: string[], tag: string): string[] {
+  return tags.includes(tag) ? tags : [...tags, tag];
 }
 
 function writeTodoStore(rootDir: string, store: TodoStore): void {
@@ -580,6 +632,290 @@ function renderMarkdown(markdown: string): string {
   closeList();
   if (inCode) html.push("</code></pre>");
   return html.join("\n");
+}
+
+function renderTagList(tags: string[], limit = 5): string {
+  const visible = tags
+    .filter((tag) => !["normalized", "conversation_import", "migrated_from_mac_agentmemory_v0917"].includes(tag))
+    .slice(0, limit);
+  return visible.length
+    ? visible.map((tag) => `<span class="tag">${esc(tag)}</span>`).join("")
+    : '<span class="muted">none</span>';
+}
+
+function renderLandingPage(baseUrl: string, stats: LandingStats, todos: TodoItem[], recentMemories: LandingMemory[]): string {
+  const activeTodos = sortTodosForLanding(todos.filter(todoIsActive));
+  const updatedAt = new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date());
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>agent-memory work orders</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #f2f2f0;
+      color: #222;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 840px;
+      margin: 0 auto;
+      background: #fff;
+      border: 2px solid #111;
+      box-shadow: 0 14px 34px rgba(0,0,0,0.12);
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 18px 24px;
+      border-bottom: 2px solid #111;
+    }
+    h1 { margin: 0 0 4px; font-size: 24px; line-height: 1.1; }
+    .subtitle, .muted { color: #666; }
+    .header-meta { text-align: right; font-size: 11px; color: #555; }
+    .section { padding: 20px 24px; border-bottom: 2px solid #111; }
+    .section:last-child { border-bottom: 0; }
+    h2 {
+      margin: 0 0 12px;
+      padding-bottom: 4px;
+      border-bottom: 2px solid #111;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    h3 { margin: 0 0 8px; font-size: 14px; }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .stat {
+      min-height: 84px;
+      padding: 12px;
+      border: 2px solid #111;
+      background: #f7f7f4;
+    }
+    .stat.is-hot { background: #fff8df; }
+    .stat-label { color: #666; text-transform: uppercase; letter-spacing: .04em; font-size: 10px; }
+    .stat-value { display: block; margin-top: 4px; font-size: 26px; font-weight: 700; line-height: 1; }
+    .work-order {
+      margin: 0 0 12px;
+      border: 2px solid #111;
+      background: #fff;
+    }
+    .wo-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 12px;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+    .wo-header.high { background: #b42318; }
+    .wo-header.medium { background: #b7791f; color: #111; }
+    .wo-header.low { background: #5f6b7a; }
+    .wo-body { padding: 12px; }
+    .wo-body p { margin: 0; color: #444; }
+    .wo-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid #ccc;
+      color: #555;
+      font-size: 11px;
+    }
+    .tag {
+      display: inline-block;
+      margin: 0 4px 4px 0;
+      padding: 1px 6px;
+      border: 1px solid #999;
+      background: #eee;
+      font-size: 10px;
+      white-space: nowrap;
+    }
+    .complete-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      font-weight: 700;
+    }
+    .complete-box input { width: 14px; height: 14px; }
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .quick-card {
+      display: block;
+      padding: 14px;
+      border: 2px solid #111;
+      color: #111;
+      text-decoration: none;
+      background: #fafafa;
+    }
+    .quick-card strong { display: block; margin-bottom: 4px; font-size: 13px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    th, td {
+      padding: 7px 8px;
+      border-bottom: 1px solid #ccc;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      border-bottom: 2px solid #111;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      font-size: 10px;
+    }
+    .empty {
+      padding: 18px;
+      border: 2px dashed #999;
+      color: #666;
+      background: #fafafa;
+    }
+    .footer {
+      padding: 12px 24px;
+      border-top: 2px solid #111;
+      color: #666;
+      font-size: 10px;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    @media (max-width: 720px) {
+      body { padding: 12px; }
+      .header, .wo-meta, .footer { flex-direction: column; }
+      .header-meta { text-align: left; }
+      .stats-grid, .quick-grid { grid-template-columns: 1fr; }
+    }
+    @media print {
+      body { padding: 0; background: #fff; }
+      .container { border: 0; box-shadow: none; }
+      .quick-grid, .complete-box input { display: none; }
+      .wo-header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div>
+        <h1>agent-memory</h1>
+        <div class="subtitle">work order register · todo-first memory review</div>
+      </div>
+      <div class="header-meta">
+        <div><strong>Last updated</strong></div>
+        <div>${esc(updatedAt)}</div>
+        <div>${esc(baseUrl)}</div>
+      </div>
+    </header>
+
+    <section class="section">
+      <div class="stats-grid">
+        <div class="stat"><div class="stat-label">curated</div><span class="stat-value">${stats.curated}</span></div>
+        <div class="stat"><div class="stat-label">archive</div><span class="stat-value">${stats.rawArchive}</span></div>
+        <div class="stat is-hot"><div class="stat-label">active work orders</div><span class="stat-value">${stats.todoActive}</span></div>
+        <div class="stat is-hot"><div class="stat-label">needs review</div><span class="stat-value">${stats.candidates}</span></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Active Work Orders</h2>
+      ${activeTodos.length
+        ? activeTodos.map((todo, index) => {
+          const priority = todoDisplayPriority(todo.priority);
+          return `<article class="work-order">
+            <div class="wo-header ${priority}">
+              <span>WO-${String(index + 1).padStart(3, "0")} · ${priority} priority</span>
+              <span>${esc(displayDate(todo.createdAt) ?? todo.createdAt.slice(0, 10))}</span>
+            </div>
+            <div class="wo-body">
+              <h3>${esc(todo.title)}</h3>
+              <p>${esc(todo.notes || "No notes captured. Review source before acting.")}</p>
+              <div class="wo-meta">
+                <div><strong>Tags:</strong> ${renderTagList(todo.tags)}</div>
+                <label class="complete-box">
+                  <input type="checkbox" data-todo-id="${esc(todo.id)}" />
+                  Complete
+                </label>
+              </div>
+            </div>
+          </article>`;
+        }).join("")
+        : '<div class="empty">No active work orders. Use the browser view to create one from a memory or add a new to-do.</div>'}
+    </section>
+
+    <section class="section">
+      <h2>Quick Access</h2>
+      <div class="quick-grid">
+        <a class="quick-card" href="/old"><strong>Browse curated memories</strong><span class="muted">Open the full memory browser and editor.</span></a>
+        <a class="quick-card" href="/old"><strong>View archive</strong><span class="muted">Inspect raw imports, candidates, duplicates, and stale records.</span></a>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Recent Curated Memories</h2>
+      ${recentMemories.length
+        ? `<table>
+          <thead><tr><th>Title</th><th>Tags</th><th>Date</th></tr></thead>
+          <tbody>
+            ${recentMemories.map((memory) => `<tr>
+              <td><a href="/old" title="${esc(memory.id)}">${esc(memory.title)}</a></td>
+              <td>${renderTagList(memory.tags, 4)}</td>
+              <td>${esc(memory.displayDate ?? "unknown")}</td>
+            </tr>`).join("")}
+          </tbody>
+        </table>`
+        : '<div class="empty">No curated memories found.</div>'}
+    </section>
+
+    <footer class="footer">
+      <span>agent-memory · work order format UI</span>
+      <span>curated ${stats.curated} · archive ${stats.rawArchive} · total ${stats.total}</span>
+    </footer>
+  </div>
+  <script>
+    document.querySelectorAll("[data-todo-id]").forEach((checkbox) => {
+      checkbox.addEventListener("change", async (event) => {
+        const input = event.currentTarget;
+        input.disabled = true;
+        try {
+          await fetch("/api/todos/" + encodeURIComponent(input.dataset.todoId) + "/complete", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ isDone: input.checked }),
+          });
+          window.setTimeout(() => window.location.reload(), 250);
+        } catch {
+          input.checked = false;
+          input.disabled = false;
+        }
+      });
+    });
+  </script>
+</body>
+</html>`;
 }
 
 function renderPage(baseUrl: string): string {
@@ -2068,6 +2404,47 @@ export async function run(args: string[]) {
       const url = new URL(request.url);
 
       if (request.method === "GET" && url.pathname === "/") {
+        const [listResult, brokenResult] = await Promise.all([
+          service.list(),
+          service.brokenLinks(),
+        ]);
+        if (listResult.isErr()) {
+          return json({ error: listResult.error.message }, { status: 500 });
+        }
+        if (brokenResult.isErr()) {
+          return json({ error: brokenResult.error.message }, { status: 500 });
+        }
+
+        const counts = countEntries(listResult.value.map((entry) => ({ tags: entry.tags ?? [] })));
+        const todoStore = readTodoStore(rootDir);
+        const todoCounts = todoStats(todoStore.todos);
+        const recentMemories: LandingMemory[] = [];
+        for (const entry of listResult.value) {
+          const tags = entry.tags ?? [];
+          if (inferTier(tags) !== "curated") continue;
+          const readResult = await service.read(entry.id);
+          const derived = readResult.isOk()
+            ? deriveBrowserEntry(tags, readResult.value.body)
+            : null;
+          recentMemories.push({
+            id: entry.id,
+            title: entry.title,
+            tags,
+            displayDate: derived?.displayDate ?? null,
+          });
+        }
+        recentMemories.sort((a, b) => (b.displayDate ?? "").localeCompare(a.displayDate ?? ""));
+
+        return new Response(renderLandingPage(`${url.protocol}//${url.host}`, {
+          ...counts,
+          todoActive: todoCounts.active,
+          todoDone: todoCounts.done,
+        }, todoStore.todos, recentMemories.slice(0, 10)), {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      }
+
+      if (request.method === "GET" && url.pathname === "/old") {
         return new Response(renderPage(`${url.protocol}//${url.host}`), {
           headers: { "content-type": "text/html; charset=utf-8" },
         });
@@ -2098,10 +2475,44 @@ export async function run(args: string[]) {
         });
       }
 
+      if (request.method === "GET" && url.pathname === "/api/stats") {
+        const listResult = await service.list();
+        if (listResult.isErr()) {
+          return json({ error: listResult.error.message }, { status: 500 });
+        }
+        const counts = countEntries(listResult.value.map((entry) => ({ tags: entry.tags ?? [] })));
+        const todoCounts = todoStats(readTodoStore(rootDir).todos);
+        return json({
+          curated: counts.curated,
+          archive: counts.rawArchive,
+          candidates: counts.candidates,
+          stale: listResult.value.filter((entry) => inferClasses(entry.tags ?? []).includes("stale")).length,
+          duplicates: listResult.value.filter((entry) => inferClasses(entry.tags ?? []).includes("duplicate")).length,
+          todos: {
+            active: todoCounts.active,
+            done: todoCounts.done,
+            total: todoCounts.total,
+          },
+        });
+      }
+
       if (request.method === "GET" && url.pathname === "/api/todos") {
         try {
           const store = readTodoStore(rootDir);
-          return json({ path: todoStorePath(rootDir), version: store.version, todos: store.todos });
+          const status = url.searchParams.get("status");
+          const sort = url.searchParams.get("sort") ?? "priority";
+          const todos = filterTodos(store.todos, status);
+          const sortedTodos = sort === "created"
+            ? [...todos].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+            : sort === "modified"
+              ? [...todos].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+              : sortTodosForLanding(todos);
+          return json({
+            path: todoStorePath(rootDir),
+            version: store.version,
+            todos: sortedTodos,
+            stats: todoStats(store.todos),
+          });
         } catch (error) {
           return json({ error: error instanceof Error ? error.message : "failed to read to-dos" }, { status: 500 });
         }
@@ -2140,6 +2551,65 @@ export async function run(args: string[]) {
           return json({ todo }, { status: 201 });
         } catch (error) {
           return json({ error: error instanceof Error ? error.message : "failed to write to-dos" }, { status: 500 });
+        }
+      }
+
+      if (request.method === "POST" && url.pathname.startsWith("/api/todos/") && url.pathname.endsWith("/complete")) {
+        const id = decodeURIComponent(url.pathname.slice("/api/todos/".length, -"/complete".length));
+        const payload = await request.json().catch(() => null);
+        if (!payload || typeof payload !== "object") {
+          return json({ error: "invalid JSON body" }, { status: 400 });
+        }
+
+        try {
+          const store = readTodoStore(rootDir);
+          const index = store.todos.findIndex((todo) => todo.id === id);
+          if (index < 0) return json({ error: "to-do not found" }, { status: 404 });
+          const existing = store.todos[index];
+          if (!existing) return json({ error: "to-do not found" }, { status: 404 });
+          const isDone = Boolean((payload as { isDone?: unknown }).isDone);
+          const now = new Date().toISOString();
+          const updated: TodoItem = {
+            ...existing,
+            status: isDone ? "done" : "open",
+            updatedAt: now,
+            completedAt: isDone ? existing.completedAt ?? now : undefined,
+          };
+          store.todos[index] = updated;
+          writeTodoStore(rootDir, store);
+          return json({ todo: updated });
+        } catch (error) {
+          return json({ error: error instanceof Error ? error.message : "failed to update to-do" }, { status: 500 });
+        }
+      }
+
+      if (request.method === "POST" && url.pathname.startsWith("/api/todos/") && url.pathname.endsWith("/priority")) {
+        const id = decodeURIComponent(url.pathname.slice("/api/todos/".length, -"/priority".length));
+        const payload = await request.json().catch(() => null);
+        if (!payload || typeof payload !== "object") {
+          return json({ error: "invalid JSON body" }, { status: 400 });
+        }
+        const priority = (payload as { priority?: unknown }).priority;
+        if (!isTodoPriority(priority)) {
+          return json({ error: "invalid priority" }, { status: 400 });
+        }
+
+        try {
+          const store = readTodoStore(rootDir);
+          const index = store.todos.findIndex((todo) => todo.id === id);
+          if (index < 0) return json({ error: "to-do not found" }, { status: 404 });
+          const existing = store.todos[index];
+          if (!existing) return json({ error: "to-do not found" }, { status: 404 });
+          const updated: TodoItem = {
+            ...existing,
+            priority,
+            updatedAt: new Date().toISOString(),
+          };
+          store.todos[index] = updated;
+          writeTodoStore(rootDir, store);
+          return json({ todo: updated });
+        } catch (error) {
+          return json({ error: error instanceof Error ? error.message : "failed to update to-do priority" }, { status: 500 });
         }
       }
 
@@ -2198,6 +2668,174 @@ export async function run(args: string[]) {
         } catch (error) {
           return json({ error: error instanceof Error ? error.message : "failed to delete to-do" }, { status: 500 });
         }
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/memories") {
+        const query = url.searchParams.get("search") ?? url.searchParams.get("query") ?? undefined;
+        const org = url.searchParams.get("org") ?? undefined;
+        const tier = url.searchParams.get("tier");
+        const classFilter = url.searchParams.get("class");
+        const source = url.searchParams.get("source") as SourceKind | null;
+        const topic = url.searchParams.get("topic") as TopicKind | null;
+        const limit = Number.parseInt(url.searchParams.get("limit") ?? "50", 10);
+        const offset = Number.parseInt(url.searchParams.get("offset") ?? "0", 10);
+        const result = await service.list({ org: org || undefined });
+
+        if (result.isErr()) {
+          return json({ error: result.error.message }, { status: 500 });
+        }
+
+        const memories: EntrySummary[] = [];
+        for (const entry of result.value) {
+          const tags = entry.tags ?? [];
+          const readResult = await service.read(entry.id);
+          const body = readResult.isOk() ? readResult.value.body : "";
+          const derived = deriveBrowserEntry(tags, body);
+          const searchText = `${entry.title}\n${tags.join(" ")}\n${derived.context}\n${derived.summary}\n${derived.operational}\n${derived.appliesTo}\n${derived.metadata}`.toLowerCase();
+          if (query && !searchText.includes(query.toLowerCase())) continue;
+          if (tier === "curated" && derived.tier !== "curated") continue;
+          if (tier === "raw_archive" && derived.tier !== "raw_archive") continue;
+          if (classFilter && !derived.classes.includes(classFilter as EntryClass)) continue;
+          if (source && derived.source !== source) continue;
+          if (topic && !derived.topics.includes(topic)) continue;
+
+          memories.push({
+            id: entry.id,
+            title: entry.title,
+            tags,
+            org: entry.org,
+            source: derived.source,
+            tier: derived.tier,
+            classes: derived.classes,
+            topics: derived.topics,
+            excerpt: derived.excerpt,
+            createdAt: derived.createdAt,
+            updatedAt: derived.updatedAt,
+            displayDate: derived.displayDate,
+          });
+        }
+
+        memories.sort((a, b) => {
+          const aDate = a.updatedAt ?? a.createdAt;
+          const bDate = b.updatedAt ?? b.createdAt;
+          if (aDate && bDate && aDate !== bDate) return bDate.localeCompare(aDate);
+          if (aDate && !bDate) return -1;
+          if (!aDate && bDate) return 1;
+          return a.title.localeCompare(b.title);
+        });
+
+        return json({
+          memories: memories.slice(offset, offset + limit),
+          total: result.value.length,
+          filtered: memories.length,
+          limit,
+          offset,
+        });
+      }
+
+      if (request.method === "GET" && url.pathname.startsWith("/api/memories/")) {
+        const id = decodeURIComponent(url.pathname.slice("/api/memories/".length));
+        const entryResult = await service.read(id);
+        if (entryResult.isErr()) {
+          return json({ error: entryResult.error.message }, { status: 404 });
+        }
+        const derived = deriveBrowserEntry(entryResult.value.meta.tags ?? [], entryResult.value.body);
+        return json({
+          memory: {
+            id: entryResult.value.meta.id,
+            title: entryResult.value.meta.title,
+            tags: entryResult.value.meta.tags ?? [],
+            org: entryResult.value.meta.org,
+            body: entryResult.value.body,
+            source: derived.source,
+            tier: derived.tier,
+            classes: derived.classes,
+            topics: derived.topics,
+            contextHtml: renderMarkdown(derived.context),
+            summaryHtml: renderMarkdown(derived.summary),
+            operationalHtml: renderMarkdown(derived.operational),
+            contentHtml: renderMarkdown(derived.content),
+            appliesToHtml: renderMarkdown(derived.appliesTo),
+            confidenceHtml: renderMarkdown(derived.confidence),
+            commandsHtml: renderMarkdown(derived.commands),
+            metadataHtml: renderMarkdown(derived.metadata),
+            rawSourceHtml: renderMarkdown(derived.rawSource),
+            createdAt: derived.createdAt,
+            updatedAt: derived.updatedAt,
+            displayDate: derived.displayDate,
+          } satisfies ApiEntry,
+        });
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/memories") {
+        const payload = await request.json().catch(() => null);
+        if (!payload || typeof payload !== "object") {
+          return json({ error: "invalid JSON body" }, { status: 400 });
+        }
+        const data = payload as Partial<Record<"title" | "body" | "org" | "tags", unknown>>;
+        const title = typeof data.title === "string" ? data.title.trim() : "";
+        const body = typeof data.body === "string" ? data.body : "";
+        const org = typeof data.org === "string" && data.org.trim() ? data.org.trim() : "default";
+        const tags = Array.isArray(data.tags) ? data.tags.filter((tag): tag is string => typeof tag === "string").map((tag) => tag.trim()).filter(Boolean) : [];
+        if (!title || !body) {
+          return json({ error: "title and body are required" }, { status: 400 });
+        }
+        const result = await service.capture({ title, body, tags, org });
+        if (result.isErr()) {
+          return json({ error: result.error.message }, { status: 500 });
+        }
+        return json({ memory: { meta: result.value.meta, body: result.value.body } }, { status: 201 });
+      }
+
+      if (request.method === "PUT" && url.pathname.startsWith("/api/memories/")) {
+        const id = decodeURIComponent(url.pathname.slice("/api/memories/".length));
+        const payload = await request.json().catch(() => null);
+        if (!payload || typeof payload !== "object") {
+          return json({ error: "invalid JSON body" }, { status: 400 });
+        }
+        const data = payload as Partial<Record<"title" | "body" | "tags", unknown>>;
+        const title = typeof data.title === "string" ? data.title.trim() : "";
+        const body = typeof data.body === "string" ? data.body : null;
+        const tags = Array.isArray(data.tags) ? data.tags.filter((tag): tag is string => typeof tag === "string").map((tag) => tag.trim()).filter(Boolean) : null;
+
+        if (body !== null) {
+          const bodyResult = await service.updateBody(id, body);
+          if (bodyResult.isErr()) {
+            return json({ error: bodyResult.error.message }, { status: 500 });
+          }
+        }
+
+        if (title || tags) {
+          const metaResult = await service.updateMeta(id, {
+            ...(title ? { title } : {}),
+            ...(tags ? { tags } : {}),
+          });
+          if (metaResult.isErr()) {
+            return json({ error: metaResult.error.message }, { status: 500 });
+          }
+        }
+
+        return json({ ok: true });
+      }
+
+      if (request.method === "POST" && url.pathname.endsWith("/promote") && url.pathname.startsWith("/api/memories/")) {
+        const id = decodeURIComponent(url.pathname.slice("/api/memories/".length, -"/promote".length));
+        const entryResult = await service.read(id);
+        if (entryResult.isErr()) return json({ error: entryResult.error.message }, { status: 404 });
+        const nextTags = appendTag(entryResult.value.meta.tags ?? [], "tier__curated").filter((tag) => tag !== "tier__raw_archive");
+        const metaResult = await service.updateMeta(id, { tags: nextTags });
+        if (metaResult.isErr()) return json({ error: metaResult.error.message }, { status: 500 });
+        return json({ ok: true, tags: nextTags });
+      }
+
+      if (request.method === "POST" && url.pathname.endsWith("/flag-stale") && url.pathname.startsWith("/api/memories/")) {
+        const id = decodeURIComponent(url.pathname.slice("/api/memories/".length, -"/flag-stale".length));
+        const entryResult = await service.read(id);
+        if (entryResult.isErr()) return json({ error: entryResult.error.message }, { status: 404 });
+        const nextTags = appendTag(entryResult.value.meta.tags ?? [], "class__stale");
+        const metaResult = await service.updateMeta(id, { tags: nextTags });
+        if (metaResult.isErr()) return json({ error: metaResult.error.message }, { status: 500 });
+        return json({ ok: true, tags: nextTags });
       }
 
       if (request.method === "GET" && url.pathname === "/api/entries") {
